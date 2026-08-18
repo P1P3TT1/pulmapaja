@@ -112,12 +112,12 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .kgrid{display:grid;border:0.6mm solid #000}
 .kgrid .cell{width:var(--cell);height:var(--cell);border-right:0.15mm solid #555;border-bottom:0.15mm solid #555;position:relative;
   display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:500;font-size:calc(var(--cell)*0.5)}
-.kgrid .cell.black{background:#2A2A2A}
+.kgrid .cell.black{background:#E6E6E6}
 .kgrid .cell.edge-r{border-right:0}
 .kgrid .cell.edge-b{border-bottom:0}
 .kgrid .cell .diag{position:absolute;inset:0}
 .kgrid .cell .down,.kgrid .cell .across{position:absolute;font-family:var(--mono);font-size:calc(var(--cell)*0.32);
-  font-weight:600;color:#fff;line-height:1}
+  font-weight:600;color:#000;line-height:1}
 .kgrid .cell .down{left:6%;bottom:6%}
 .kgrid .cell .across{right:6%;top:6%}
 
@@ -1377,7 +1377,7 @@ function renderKakuro(item, isSolution) {
         line.setAttribute("class", "diag");
         line.setAttribute("viewBox", "0 0 100 100");
         line.setAttribute("preserveAspectRatio", "none");
-        line.innerHTML = '<line x1="0" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>';
+        line.innerHTML = '<line x1="0" y1="0" x2="100" y2="100" stroke="#000" stroke-width="2.5"/>';
         el.appendChild(line);
       }
       if (a) { const s = document.createElement("span"); s.className = "across"; s.textContent = a; el.appendChild(s); }

@@ -79,13 +79,19 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 
 /* ---- grids ---- */
 .grid{display:grid;border:0.9mm solid #000;position:relative}
-.grid .cell{border-right:0.15mm solid #8C8C8C;border-bottom:0.15mm solid #8C8C8C;
+.grid .cell{border-right:0.15mm solid #8C8C8C;border-bottom:0.15mm solid #8C8C8C;position:relative;
   display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:500;
   font-size:calc(var(--cell)*0.6);line-height:1;color:#000;width:var(--cell);height:var(--cell)}
-.grid .cell.br{border-right:0.7mm solid #000}
-.grid .cell.bb{border-bottom:0.7mm solid #000}
-.grid .cell.edge-r{border-right:0}
-.grid .cell.edge-b{border-bottom:0}
+.grid .cell.edge-r,.grid .cell.br{border-right:0}
+.grid .cell.edge-b,.grid .cell.bb{border-bottom:0}
+/* Region dividers replace the thin line instead of covering it, and are sized
+   from --cell rather than from border widths. A thick and a thin border on the
+   same cell would miter diagonally and let grey cut across the black; leaving
+   the thin one underneath instead lets it resurface alongside the black when
+   print snaps the border and the pseudo-element to different device pixels. */
+.grid .cell.br::after,.grid .cell.bb::before{content:"";position:absolute;pointer-events:none}
+.grid .cell.br::after{top:0;right:0;height:var(--cell);width:0;border-left:0.7mm solid #000}
+.grid .cell.bb::before{left:0;bottom:0;width:var(--cell);height:0;border-top:0.7mm solid #000}
 .grid.solution .cell{font-weight:400}
 
 /* kropki dots */

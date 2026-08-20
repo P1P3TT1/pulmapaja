@@ -1149,6 +1149,220 @@ function makeHitori(level) {
   return null;
 }
 
+/* ---------- nonogrammi ---------- */
+
+const NG_UNKNOWN = 0, NG_EMPTY = 1, NG_FILL = 2;
+
+/* The only place that decides what the picture is. Everything downstream just
+   takes a filled/empty bitmap, so a library of drawn pictures can replace or
+   wrap this without touching the clues, the solver or the renderer.
+   Blobs are grown by random accretion rather than filling cells independently,
+   so the result reads as connected shapes instead of static. */
+function nonogramPattern(n, cfg) {
+  const N = n * n;
+  const fill = new Uint8Array(N);
+  const half = cfg.symmetric ? Math.ceil(n / 2) : n;
+  const target = Math.round(n * half * cfg.density);
+  const frontier = [];
+  let placed = 0;
+
+  const seed = () => {
+    const i = Math.floor(Math.random() * n) * n + Math.floor(Math.random() * half);
+    if (fill[i]) return;
+    fill[i] = 1; placed++; frontier.push(i);
+  };
+  for (let b = 0; b < cfg.blobs; b++) seed();
+
+  for (let guard = 0; placed < target && guard < N * 40; guard++) {
+    if (!frontier.length) { seed(); continue; }
+    const k = Math.floor(Math.random() * frontier.length);
+    const opts = neighbours(frontier[k], n).filter(j => !fill[j] && j % n < half);
+    if (!opts.length) { frontier.splice(k, 1); continue; }
+    const j = opts[Math.floor(Math.random() * opts.length)];
+    fill[j] = 1; placed++; frontier.push(j);
+  }
+
+  if (cfg.symmetric) {
+    for (let r = 0; r < n; r++) for (let c = 0; c < half; c++) {
+      if (fill[r * n + c]) fill[r * n + (n - 1 - c)] = 1;
+    }
+  }
+  return fill;
+}
+
+/* Run lengths per row and per column. An empty line yields [], printed as 0. */
+function nonogramClues(fill, n) {
+  const runs = get => {
+    const out = [];
+    let run = 0;
+    for (let k = 0; k < n; k++) {
+      if (get(k)) run++;
+      else if (run) { out.push(run); run = 0; }
+    }
+    if (run) out.push(run);
+    return out;
+  };
+  const rows = [], cols = [];
+  for (let r = 0; r < n; r++) rows.push(runs(c => fill[r * n + c]));
+  for (let c = 0; c < n; c++) cols.push(runs(r => fill[r * n + c]));
+  return {rows, cols};
+}
+
+/* Deduces everything a single line allows, given what is already known.
+   feasible[i][j] says the cells from i on can still hold the clues from j on,
+   so a forward walk over the reachable states can mark, for every cell,
+   whether any valid arrangement fills it and whether any leaves it blank. A
+   cell that allows only one of the two is forced. Runs in O(line * clues) --
+   no arrangement is ever enumerated. Mutates `cells`; false means the line
+   cannot be satisfied at all. */
+function solveLine(cells, clues) {
+  const L = cells.length, m = clues.length;
+
+  /* prefix counts keep the "does this run fit here" test O(1) */
+  const blanks = new Int16Array(L + 1);
+  for (let i = 0; i < L; i++) blanks[i + 1] = blanks[i] + (cells[i] === NG_EMPTY ? 1 : 0);
+  const restBlank = new Uint8Array(L + 2);
+  restBlank[L] = 1;
+  for (let i = L - 1; i >= 0; i--) restBlank[i] = cells[i] === NG_FILL ? 0 : restBlank[i + 1];
+
+  const feasible = [];
+  for (let i = 0; i <= L; i++) feasible.push(new Uint8Array(m + 1));
+  for (let i = 0; i <= L; i++) feasible[i][m] = restBlank[i];
+
+  const placeable = (i, len) => i + len <= L && blanks[i + len] - blanks[i] === 0;
+
+  for (let j = m - 1; j >= 0; j--) {
+    for (let i = L; i >= 0; i--) {
+      let ok = i < L && cells[i] !== NG_FILL && feasible[i + 1][j];
+      if (!ok && placeable(i, clues[j])) {
+        const after = i + clues[j];
+        ok = after === L
+          ? !!feasible[L][j + 1]
+          : cells[after] !== NG_FILL && !!feasible[after + 1][j + 1];
+      }
+      feasible[i][j] = ok ? 1 : 0;
+    }
+  }
+  if (!feasible[0][0]) return false;
+
+  const canFill = new Uint8Array(L), canBlank = new Uint8Array(L);
+  const reach = [];
+  for (let i = 0; i <= L; i++) reach.push(new Uint8Array(m + 1));
+  reach[0][0] = 1;
+  for (let i = 0; i <= L; i++) {
+    for (let j = 0; j <= m; j++) {
+      if (!reach[i][j]) continue;
+      /* leave this cell blank */
+      if (i < L && cells[i] !== NG_FILL && feasible[i + 1][j]) {
+        canBlank[i] = 1; reach[i + 1][j] = 1;
+      }
+      if (j === m) continue;
+      /* or start clue j here */
+      if (!placeable(i, clues[j])) continue;
+      const after = i + clues[j];
+      const rest = after === L
+        ? !!feasible[L][j + 1]
+        : cells[after] !== NG_FILL && !!feasible[after + 1][j + 1];
+      if (!rest) continue;
+      for (let k = i; k < after; k++) canFill[k] = 1;
+      if (after === L) { reach[L][j + 1] = 1; }
+      else { canBlank[after] = 1; reach[after + 1][j + 1] = 1; }
+    }
+  }
+
+  for (let k = 0; k < L; k++) {
+    if (cells[k] !== NG_UNKNOWN) continue;
+    if (canFill[k] && !canBlank[k]) cells[k] = NG_FILL;
+    else if (!canFill[k] && canBlank[k]) cells[k] = NG_EMPTY;
+    else if (!canFill[k] && !canBlank[k]) return false;
+  }
+  return true;
+}
+
+/* Applies solveLine to every row and column until nothing more follows,
+   the same shape as the Kakuro propagation loop. */
+function nonogramSolve(rowClues, colClues, n) {
+  const grid = new Uint8Array(n * n);
+  const line = new Uint8Array(n);
+  let rounds = 0;
+
+  for (;;) {
+    let changed = false;
+    if (++rounds > 200) return null;
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) line[c] = grid[r * n + c];
+      if (!solveLine(line, rowClues[r])) return null;
+      for (let c = 0; c < n; c++) {
+        if (grid[r * n + c] !== line[c]) { grid[r * n + c] = line[c]; changed = true; }
+      }
+    }
+    for (let c = 0; c < n; c++) {
+      for (let r = 0; r < n; r++) line[r] = grid[r * n + c];
+      if (!solveLine(line, colClues[c])) return null;
+      for (let r = 0; r < n; r++) {
+        if (grid[r * n + c] !== line[r]) { grid[r * n + c] = line[r]; changed = true; }
+      }
+    }
+    if (!changed) break;
+  }
+
+  let unknown = 0;
+  for (let i = 0; i < n * n; i++) if (grid[i] === NG_UNKNOWN) unknown++;
+  return {grid, rounds, unknown};
+}
+
+/* rounds is a cheap stand-in for how much back-and-forth a solver needs, and
+   is the only difficulty lever besides size. Several small blobs beat a few
+   large ones: they leave far fewer blank rows and columns.
+   Sizes are multiples of five so the every-five guide lines always group the
+   grid evenly -- the same reason published nonograms use those sizes. */
+const NONOGRAM_CFG = {
+  easy:   {n: 10, density: 0.55, blobs: 7,  symmetric: true,  maxFull: 4, maxClues: 4, maxRounds: 4},
+  medium: {n: 15, density: 0.55, blobs: 9,  symmetric: false, maxFull: 3, maxClues: 4, minRounds: 3, maxRounds: 8},
+  hard:   {n: 20, density: 0.55, blobs: 12, symmetric: false, maxFull: 3, maxClues: 5, minRounds: 4}
+};
+
+function makeNonogram(level) {
+  const cfg = NONOGRAM_CFG[level];
+  const n = cfg.n;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const fill = nonogramPattern(n, cfg);
+    const {rows, cols} = nonogramClues(fill, n);
+
+    /* A blank line reads as padding rather than picture, and a completely
+       full one hands the solver a free row. Capping how many numbers a line
+       may carry also fixes how wide the clue margins can get, which is what
+       keeps a puzzle inside its share of the page. Checked before solving,
+       since it is much the cheaper test. */
+    let blank = 0, full = 0, widest = 0;
+    for (const c of rows.concat(cols)) {
+      if (!c.length) blank++;
+      else if (c.length === 1 && c[0] === n) full++;
+      if (c.length > widest) widest = c.length;
+    }
+    if (blank || full > cfg.maxFull || widest > cfg.maxClues) continue;
+
+    const res = nonogramSolve(rows, cols, n);
+
+    /* Accepted only when the line logic finishes on its own. Every deduction
+       it makes is forced, and the pattern is a valid solution, so a complete
+       solve is also proof that the solution is the only one. */
+    if (!res || res.unknown) continue;
+    if (res.rounds < (cfg.minRounds || 0)) continue;
+    if (res.rounds > (cfg.maxRounds || 999)) continue;
+
+    /* independent check that the solver landed on the pattern it was given */
+    let same = true;
+    for (let i = 0; i < n * n; i++) {
+      if ((res.grid[i] === NG_FILL) !== !!fill[i]) { same = false; break; }
+    }
+    if (!same) continue;
+
+    return {n, fill, rowClues: rows, colClues: cols};
+  }
+  return null;
+}
+
 /* ============================================================
    Type-specific data
    ============================================================ */
@@ -1175,6 +1389,17 @@ const TYPES = {
   kakuro: {name: "Kakuro", family: "kakuro", symmetry: false,
     rules: "Täytä valkoiset ruudut luvuilla 1–9. Jokaisen vaaka- ja pystyjonon summa on merkitty mustaan ruutuun, eikä sama luku saa toistua samassa jonossa.",
     cell: {1: "16mm", 2: "10mm", 4: "8mm", sol: "6.5mm"}},
+  nonogram: {name: "Nonogrammi", family: "nonogram", symmetry: false,
+    rules: "Väritä ruutuja niin, että kunkin rivin ja sarakkeen värjätyt jaksot vastaavat sen reunaan merkittyjä lukuja. Luvut kertovat järjestyksessä, montako ruutua kussakin yhtenäisessä jaksossa on, ja jaksojen välissä on ainakin yksi värjäämätön ruutu. Nolla tarkoittaa, ettei rivillä ole yhtään värjättyä ruutua. Valmis ruudukko muodostaa kuvion.",
+    cell: {1: "9mm", 2: "6mm", 4: "4.5mm", sol: "4mm"},
+    /* the grid doubles from 10 to 20 across the levels, far more than any
+       other type, so each level gets its own sizes rather than squeezing
+       the small ones to fit the large one */
+    cellByLevel: {
+      easy:   {1: "12.9mm", 2: "8.6mm", 4: "6.4mm", sol: "7mm"},
+      medium: {1: "9.7mm",  2: "6.2mm", 4: "4.3mm", sol: "4.8mm"},
+      hard:   {1: "7.3mm",  2: "4.8mm", 4: "3.4mm", sol: "3.6mm"}
+    }},
   hitori: {name: "Hitori", family: "hitori", symmetry: false,
     rules: "Väritä ruutuja niin, ettei millään rivillä tai sarakkeessa ole samaa lukua kahdesti värittämättömissä ruuduissa. Värjätyt ruudut eivät saa koskettaa toisiaan sivuistaan, ja värjäämättömien on muodostettava yhtenäinen alue.",
     cell: {1: "20mm", 2: "13mm", 4: "10mm", sol: "8mm"}}
@@ -1411,7 +1636,58 @@ function renderHitori(item, isSolution) {
   return g;
 }
 
-const RENDER = {sudoku: renderSudoku, kropki: renderKropki, futoshiki: renderFutoshiki, kakuro: renderKakuro, hitori: renderHitori};
+function nonogramClueCell(nums) {
+  const d = document.createElement("div");
+  d.className = "clue";
+  for (const v of (nums.length ? nums : [0])) {
+    const s = document.createElement("span");
+    s.textContent = String(v);
+    d.appendChild(s);
+  }
+  return d;
+}
+
+function renderNonogram(item, isSolution) {
+  const n = item.n;
+  const play = document.createElement("div");
+  play.className = "grid" + (isSolution ? " solution" : "");
+  play.style.gridTemplateColumns = `repeat(${n}, var(--cell))`;
+  for (let i = 0; i < n * n; i++) {
+    play.appendChild(cellEl("", isSolution && item.fill[i] ? "filled" : ""));
+  }
+  /* heavier rule every five cells, so long runs stay countable by eye */
+  play.appendChild(gridLines(n, (a, b) => b === a + 1
+    ? (a % n + 1) % 5 === 0
+    : (((a / n) | 0) + 1) % 5 === 0));
+
+  /* the solution is the picture itself -- the clues add nothing there, and
+     leaving them off keeps the solution sheets compact */
+  if (isSolution) {
+    play.setAttribute("role", "img");
+    play.setAttribute("aria-label", "Ratkaisu");
+    return play;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "ngram";
+  wrap.setAttribute("role", "img");
+  wrap.setAttribute("aria-label", "Nonogrammi-tehtävä");
+
+  const corner = document.createElement("div");
+  const cols = document.createElement("div");
+  cols.className = "ngram-cols";
+  cols.style.gridTemplateColumns = `repeat(${n}, var(--cell))`;
+  for (const nums of item.colClues) cols.appendChild(nonogramClueCell(nums));
+  const rows = document.createElement("div");
+  rows.className = "ngram-rows";
+  rows.style.gridTemplateRows = `repeat(${n}, var(--cell))`;
+  for (const nums of item.rowClues) rows.appendChild(nonogramClueCell(nums));
+
+  wrap.append(corner, cols, rows, play);
+  return wrap;
+}
+
+const RENDER = {sudoku: renderSudoku, kropki: renderKropki, futoshiki: renderFutoshiki, kakuro: renderKakuro, hitori: renderHitori, nonogram: renderNonogram};
 
 /* ============================================================
    Puzzle creation
@@ -1434,6 +1710,10 @@ function buildOne(type, level, symmetric) {
   if (fam === "kakuro") {
     const r = makeKakuro(level);
     return r ? {kind: fam, size: r.size, black: r.black, runs: r.runs, solution: r.solution} : null;
+  }
+  if (fam === "nonogram") {
+    const r = makeNonogram(level);
+    return r ? {kind: fam, n: r.n, fill: r.fill, rowClues: r.rowClues, colClues: r.colClues} : null;
   }
   const r = makeHitori(level);
   return r ? {kind: fam, n: r.n, values: r.values, shaded: r.shaded} : null;
@@ -1481,7 +1761,7 @@ countInput.addEventListener("change", clampCount);
 el("plus").addEventListener("click", () => { countInput.value = (parseInt(countInput.value, 10) || 0) + 1; clampCount(); });
 el("minus").addEventListener("click", () => { countInput.value = (parseInt(countInput.value, 10) || 2) - 1; clampCount(); });
 
-function buildSheet(title, tag, layout, items, pageNo, pageTotal, isSolution, type) {
+function buildSheet(title, level, layout, items, pageNo, pageTotal, isSolution, type) {
   const t = TYPES[type];
   const sheet = document.createElement("section");
   sheet.className = "sheet";
@@ -1490,7 +1770,7 @@ function buildSheet(title, tag, layout, items, pageNo, pageTotal, isSolution, ty
   head.className = "sheet-head";
   head.innerHTML = '<h2></h2><span class="tag"></span>';
   head.querySelector("h2").textContent = title;
-  head.querySelector(".tag").textContent = tag;
+  head.querySelector(".tag").textContent = LEVEL_LABEL[level];
   sheet.appendChild(head);
 
   const body = document.createElement("div");
@@ -1498,7 +1778,10 @@ function buildSheet(title, tag, layout, items, pageNo, pageTotal, isSolution, ty
   const cols = layout >= 4 ? 2 : 1;
   body.dataset.cols = String(cols);
   body.dataset.rows = String(layout / cols);
-  const size = isSolution ? t.cell.sol : t.cell[layout];
+  /* A type whose grid size changes a lot between levels can give its own
+     table per level; everything else keeps one table for all of them. */
+  const table = (t.cellByLevel && t.cellByLevel[level]) || t.cell;
+  const size = isSolution ? table.sol : table[layout];
   body.style.setProperty("--cell", size);
   body.style.setProperty("--gap", `calc(${size} * 0.42)`);
 
@@ -1572,11 +1855,11 @@ async function generate() {
   let page = 0;
   pages.forEach(group => {
     page++;
-    frag.appendChild(buildSheet(title, LEVEL_LABEL[level], layout, group, page, total, false, type));
+    frag.appendChild(buildSheet(title, level, layout, group, page, total, false, type));
   });
   solPages.forEach(group => {
     page++;
-    frag.appendChild(buildSheet(title + " – ratkaisut", LEVEL_LABEL[level], 6, group, page, total, true, type));
+    frag.appendChild(buildSheet(title + " – ratkaisut", level, 6, group, page, total, true, type));
   });
   previewEl.appendChild(frag);
 

@@ -98,6 +98,17 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .grid .kdots .kdot.half{fill:#000;stroke:none}
 .grid .kdots .kdot.ring{fill:none;stroke:#000;stroke-width:0.05}
 
+/* nonogrammi. The clue blocks sit outside the play grid, so both are padded by
+   its border width to keep their tracks lined up with the cells. */
+.ngram{display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto}
+.ngram-cols{display:grid;align-items:end;padding-left:0.9mm}
+.ngram-rows{display:grid;justify-items:end;padding-top:0.9mm}
+.ngram .clue{display:flex;font-family:var(--mono);font-weight:600;
+  font-size:calc(var(--cell)*0.62);line-height:1.06;color:#000}
+.ngram-cols .clue{flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:0.7mm}
+.ngram-rows .clue{align-items:center;justify-content:flex-end;gap:calc(var(--cell)*0.3);padding-right:1mm}
+.grid .cell.filled{background:#2A2A2A}
+
 /* futoshiki */
 .fgrid{display:grid}
 .fgrid .cell{border:0.4mm solid #000;display:flex;align-items:center;justify-content:center;

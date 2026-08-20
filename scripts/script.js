@@ -1212,18 +1212,56 @@ function renderSudoku(item, isSolution) {
   if (spec.diagonals) for (let k = 0; k < n; k++) { diag[k * n + k] = 1; diag[k * n + (n - 1 - k)] = 1; }
 
   for (let i = 0; i < n * n; i++) {
-    const r = (i / n) | 0, c = i % n;
-    const cls = [];
-    /* thick line where the region changes */
-    if (c < n - 1 && regionOf[i] !== regionOf[i + 1]) cls.push("br");
-    if (r < n - 1 && regionOf[i] !== regionOf[i + n]) cls.push("bb");
-    if (c === n - 1) cls.push("edge-r");
-    if (r === n - 1) cls.push("edge-b");
-    const el = cellEl(values[i] ? String(values[i]) : "", cls.join(" "));
+    const el = cellEl(values[i] ? String(values[i]) : "");
     if (diag[i]) el.style.background = "#EDEDED";
     g.appendChild(el);
   }
+  g.appendChild(gridLines(n, (a, b) => regionOf[a] !== regionOf[b]));
   return g;
+}
+
+/* Grid lines are drawn as two overlaid paths instead of as cell borders. A
+   border sits inside its own cell, so a thin and a thick one along the same
+   grid line end up aligned to the cell edge rather than to each other -- in a
+   jigsaw, where one line changes weight partway along, that shows up as a
+   sideways step. Strokes straddle the line they are on, so both weights share
+   a centre line, and one path per weight keeps each run a single shape. */
+function gridLines(n, isDivider) {
+  const thin = [], thick = [];
+  const add = (heavy, x1, y1, x2, y2) =>
+    (heavy ? thick : thin).push(`M${x1} ${y1}L${x2} ${y2}`);
+
+  for (let c = 0; c < n - 1; c++) {
+    for (let r = 0; r < n; ) {
+      const heavy = isDivider(r * n + c, r * n + c + 1);
+      let e = r;
+      while (e + 1 < n && isDivider((e + 1) * n + c, (e + 1) * n + c + 1) === heavy) e++;
+      add(heavy, c + 1, r, c + 1, e + 1);
+      r = e + 1;
+    }
+  }
+  for (let r = 0; r < n - 1; r++) {
+    for (let c = 0; c < n; ) {
+      const heavy = isDivider(r * n + c, (r + 1) * n + c);
+      let e = c;
+      while (e + 1 < n && isDivider(r * n + e + 1, (r + 1) * n + e + 1) === heavy) e++;
+      add(heavy, c, r + 1, e + 1, r + 1);
+      c = e + 1;
+    }
+  }
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "glines");
+  svg.setAttribute("viewBox", `0 0 ${n} ${n}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  for (const [cls, d] of [["thin", thin.join("")], ["thick", thick.join("")]]) {
+    if (!d) continue;
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("class", cls);
+    p.setAttribute("d", d);
+    svg.appendChild(p);
+  }
+  return svg;
 }
 
 function kropkiDotMark(cx, cy, type) {

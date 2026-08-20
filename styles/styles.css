@@ -78,7 +78,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .puzzle h3{margin:0;align-self:flex-start;font-family:var(--mono);font-size:9pt;font-weight:600;letter-spacing:0.1em;text-transform:uppercase}
 
 /* ---- grids ---- */
-.grid{display:grid;border:0.9mm solid #000}
+.grid{display:grid;border:0.9mm solid #000;position:relative}
 .grid .cell{border-right:0.15mm solid #8C8C8C;border-bottom:0.15mm solid #8C8C8C;
   display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:500;
   font-size:calc(var(--cell)*0.6);line-height:1;color:#000;width:var(--cell);height:var(--cell)}
@@ -87,6 +87,13 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .grid .cell.edge-r{border-right:0}
 .grid .cell.edge-b{border-bottom:0}
 .grid.solution .cell{font-weight:400}
+
+/* kropki dots */
+.grid .kdots{position:absolute;inset:0;pointer-events:none}
+.grid .kdots .kdot.black{fill:#000;stroke:#000;stroke-width:0.02}
+.grid .kdots .kdot.white{fill:#fff;stroke:#000;stroke-width:0.05}
+.grid .kdots .kdot.half{fill:#000;stroke:none}
+.grid .kdots .kdot.ring{fill:none;stroke:#000;stroke-width:0.05}
 
 /* futoshiki */
 .fgrid{display:grid}

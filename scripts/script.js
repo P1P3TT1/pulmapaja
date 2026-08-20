@@ -528,6 +528,153 @@ function makeFutoshiki(level) {
   return null;
 }
 
+/* ---------- kropki ---------- */
+
+/* black dot: one value is double the other. white dot: consecutive values.
+   1 and 2 satisfy both, so that pair gets a combined dot. Absence of a dot
+   is itself informative -- it proves neither relation holds there. */
+function kropkiDotType(x, y) {
+  const dbl = x === 2 * y || y === 2 * x;
+  const con = Math.abs(x - y) === 1;
+  if (dbl && con) return "both";
+  if (dbl) return "black";
+  if (con) return "white";
+  return "none";
+}
+
+const KROPKI_FULL = 511;
+const KROPKI_ALLOW = {black: [0], white: [0], both: [0], none: [0]};
+for (let x = 1; x <= 9; x++) {
+  let black = 0, white = 0;
+  for (let y = 1; y <= 9; y++) {
+    if (x === 2 * y || y === 2 * x) black |= bitOf(y);
+    if (Math.abs(x - y) === 1) white |= bitOf(y);
+  }
+  KROPKI_ALLOW.black[x] = black;
+  KROPKI_ALLOW.white[x] = white;
+  KROPKI_ALLOW.both[x] = black & white;
+  KROPKI_ALLOW.none[x] = KROPKI_FULL & ~(black | white);
+}
+const kropkiAllowed = (x, type) => KROPKI_ALLOW[type][x];
+
+/* Every adjacent pair propagates, dotted or not: a value survives in one
+   cell only if some remaining candidate in its neighbour is compatible
+   with that pair's relation (or lack of one). */
+function makeKropkiPropagator(dots) {
+  return (cand, v, elim) => {
+    let ch = false;
+    for (const {a, b, type} of dots) {
+      const ma = v[a] ? bitOf(v[a]) : cand[a];
+      const mb = v[b] ? bitOf(v[b]) : cand[b];
+      if (!ma || !mb) continue;
+      let allowB = 0, allowA = 0;
+      for (let x = 1; x <= 9; x++) if (ma & bitOf(x)) allowB |= kropkiAllowed(x, type);
+      for (let y = 1; y <= 9; y++) if (mb & bitOf(y)) allowA |= kropkiAllowed(y, type);
+      if (elim(a, KROPKI_FULL & ~allowA)) ch = true;
+      if (elim(b, KROPKI_FULL & ~allowB)) ch = true;
+    }
+    return ch;
+  };
+}
+
+/* independent check: brute-force count using the same dot relations,
+   to guard the propagator above against silently under-constraining */
+function countKropkiSolutions(spec, dots, puzzle, limit) {
+  const {N, n, peers} = spec;
+  const v = Uint8Array.from(puzzle);
+  const cand = new Uint16Array(N).fill(KROPKI_FULL);
+  for (let i = 0; i < N; i++) if (v[i]) cand[i] = 0;
+  for (let i = 0; i < N; i++) if (v[i]) for (const p of peers[i]) cand[p] &= ~bitOf(v[i]);
+
+  function propagate() {
+    for (;;) {
+      let ch = false;
+      for (const {a, b, type} of dots) {
+        const ma = v[a] ? bitOf(v[a]) : cand[a];
+        const mb = v[b] ? bitOf(v[b]) : cand[b];
+        if (!ma || !mb) return false;
+        let allowB = 0, allowA = 0;
+        for (let x = 1; x <= 9; x++) if (ma & bitOf(x)) allowB |= kropkiAllowed(x, type);
+        for (let y = 1; y <= 9; y++) if (mb & bitOf(y)) allowA |= kropkiAllowed(y, type);
+        if (!v[a] && (cand[a] & ~allowA)) { cand[a] &= allowA; ch = true; if (!cand[a]) return false; }
+        if (!v[b] && (cand[b] & ~allowB)) { cand[b] &= allowB; ch = true; if (!cand[b]) return false; }
+      }
+      if (!ch) return true;
+    }
+  }
+
+  let count = 0, steps = 0;
+  function go() {
+    if (++steps > 2000000) return true;
+    if (!propagate()) return false;
+    let best = -1, bestN = n + 1;
+    for (let i = 0; i < N; i++) {
+      if (v[i]) continue;
+      const c = popcount(cand[i]);
+      if (c === 0) return false;
+      if (c < bestN) { bestN = c; best = i; if (c === 1) break; }
+    }
+    if (best === -1) { count++; return count >= limit; }
+    const saved = cand.slice();
+    for (let d = 1; d <= n; d++) {
+      if (!(cand[best] & bitOf(d))) continue;
+      v[best] = d; cand[best] = 0;
+      for (const p of peers[best]) cand[p] &= ~bitOf(d);
+      if (go()) { v[best] = 0; cand.set(saved); return true; }
+      v[best] = 0; cand.set(saved);
+    }
+    return false;
+  }
+  go();
+  return count;
+}
+
+const KROPKI_TARGETS = {easy: 24, medium: 12, hard: 0};
+
+function digKropkiOnce(spec, propagate, sol, level) {
+  const {N} = spec;
+  const target = KROPKI_TARGETS[level];
+  const tier = level === "hard" ? 3 : 1;
+  const puz = Uint8Array.from(sol);
+  let givens = N;
+  for (const i of shuffle([...Array(N).keys()])) {
+    const saved = puz[i];
+    puz[i] = 0;
+    let ok = logicSolve(spec, puz, 1, propagate);
+    if (!ok && tier >= 2) ok = logicSolve(spec, puz, 2, propagate);
+    if (!ok && tier >= 3) ok = logicSolve(spec, puz, 3, propagate);
+    if (!ok) { puz[i] = saved; continue; }
+    givens--;
+    if (level !== "hard" && givens <= target) return {puz, givens, exact: true};
+  }
+  return {puz, givens, exact: level === "hard" ? givens <= target : false};
+}
+
+function makeKropki(level) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const spec = buildSpec("sudoku9");
+    const sol = generateSolution(spec);
+    if (!sol) continue;
+
+    const dots = allAdjacentPairs(spec.n).map(([a, b]) => ({a, b, type: kropkiDotType(sol[a], sol[b])}));
+    const propagate = makeKropkiPropagator(dots);
+
+    /* the dot layout alone (zero givens) must be fully logic-solvable,
+       otherwise this solution can never support a puzzle at any level */
+    if (!logicSolve(spec, new Uint8Array(spec.N), 3, propagate)) continue;
+    if (countKropkiSolutions(spec, dots, new Uint8Array(spec.N), 2) !== 1) continue;
+
+    let best = null;
+    for (let d = 0; d < 8; d++) {
+      const r = digKropkiOnce(spec, propagate, sol, level);
+      if (r.exact) { best = r; break; }
+      if (!best || r.givens < best.givens) best = r;
+    }
+    if (!best) continue;
+    return {spec, solution: sol, puz: best.puz, dots, givens: best.givens};
+  }
+  return null;
+}
 
 
 
@@ -1019,6 +1166,9 @@ const TYPES = {
   jigsaw: {name: "Palapelisudoku", family: "sudoku", symmetry: true,
     rules: "Kuten tavallinen sudoku, mutta lohkot ovat epäsäännöllisen muotoisia. Jokaisessa lohkossa on luvut 1–9 kerran.",
     cell: {1: "18mm", 2: "11.6mm", 4: "8.8mm", sol: "7.2mm"}},
+  kropki: {name: "Kropki-sudoku", family: "kropki", symmetry: false,
+    rules: "Täytä ruudukko luvuilla 1–9 niin, että jokaisella rivillä, sarakkeessa ja 3 × 3 -lohkossa on kukin luku täsmälleen kerran. Musta pallo vierekkäisten ruutujen välissä tarkoittaa, että toinen luvuista on kaksinkertainen toiseen nähden. Valkoinen pallo tarkoittaa, että luvut ovat peräkkäisiä. Jos ruutujen välissä ei ole palloa, kumpikaan ehto ei täyty – myös pallon puuttuminen on siis vihje. Luvut 1 ja 2 täyttävät molemmat ehdot, ja niiden välissä on musta-valkoinen yhdistelmäpallo.",
+    cell: {1: "18mm", 2: "11.6mm", 4: "8.8mm", sol: "7.2mm"}},
   futoshiki: {name: "Futoshiki", family: "futoshiki", symmetry: false,
     rules: "Täytä ruudukko luvuilla 1–n niin, että kullakin rivillä ja sarakkeessa on kukin luku kerran. Ruutujen väliset merkit kertovat, kumpi luku on suurempi.",
     cell: {1: "20mm", 2: "12mm", 4: "9mm", sol: "8mm"}},
@@ -1073,6 +1223,49 @@ function renderSudoku(item, isSolution) {
     if (diag[i]) el.style.background = "#EDEDED";
     g.appendChild(el);
   }
+  return g;
+}
+
+function kropkiDotMark(cx, cy, type) {
+  const R = 0.13;
+  const svgEl = t => document.createElementNS("http://www.w3.org/2000/svg", t);
+  const disc = cls => {
+    const c = svgEl("circle");
+    c.setAttribute("cx", cx); c.setAttribute("cy", cy); c.setAttribute("r", R);
+    c.setAttribute("class", "kdot " + cls);
+    return c;
+  };
+  if (type !== "both") return disc(type);
+
+  /* Half black, half white. The black half is filled without a stroke, so
+     the flat side stays a clean edge instead of a stroked chord, and the
+     outline is drawn last to keep the ring unbroken around both halves. */
+  const grp = svgEl("g");
+  const half = svgEl("path");
+  half.setAttribute("d", `M ${cx} ${cy - R} A ${R} ${R} 0 0 1 ${cx} ${cy + R} Z`);
+  half.setAttribute("class", "kdot half");
+  grp.appendChild(disc("white"));
+  grp.appendChild(half);
+  grp.appendChild(disc("ring"));
+  return grp;
+}
+
+function renderKropki(item, isSolution) {
+  const g = renderSudoku(item, isSolution);
+  g.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Kropki-sudoku-tehtävä");
+  const n = item.spec.n;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "kdots");
+  svg.setAttribute("viewBox", `0 0 ${n} ${n}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  for (const {a, b, type} of item.dots) {
+    if (type === "none") continue;
+    const r = (a / n) | 0, c = a % n, horiz = b === a + 1;
+    const cx = horiz ? c + 1 : c + 0.5;
+    const cy = horiz ? r + 0.5 : r + 1;
+    svg.appendChild(kropkiDotMark(cx, cy, type));
+  }
+  g.appendChild(svg);
   return g;
 }
 
@@ -1180,7 +1373,7 @@ function renderHitori(item, isSolution) {
   return g;
 }
 
-const RENDER = {sudoku: renderSudoku, futoshiki: renderFutoshiki, kakuro: renderKakuro, hitori: renderHitori};
+const RENDER = {sudoku: renderSudoku, kropki: renderKropki, futoshiki: renderFutoshiki, kakuro: renderKakuro, hitori: renderHitori};
 
 /* ============================================================
    Puzzle creation
@@ -1191,6 +1384,10 @@ function buildOne(type, level, symmetric) {
   if (fam === "sudoku") {
     const r = makePuzzle(type, level, symmetric);
     return r ? {kind: fam, spec: r.spec, puz: r.puz, solution: r.solution} : null;
+  }
+  if (fam === "kropki") {
+    const r = makeKropki(level);
+    return r ? {kind: fam, spec: r.spec, puz: r.puz, solution: r.solution, dots: r.dots} : null;
   }
   if (fam === "futoshiki") {
     const r = makeFutoshiki(level);

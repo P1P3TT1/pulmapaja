@@ -60,6 +60,33 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .status{margin-top:16px;font-family:var(--mono);font-size:11.5px;color:var(--blue);min-height:1.2em}
 .rules{margin:10px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-soft);border-top:1px solid #E0E5E7;padding-top:14px}
 
+/* own-image panel */
+.field-head{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
+.field-head .label{margin-bottom:0}
+.beta{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--blue);background:var(--blue-soft);
+  padding:2px 5px;border-radius:2px;flex:none}
+.seg button .beta{margin-left:5px;padding:1px 4px;font-size:8.5px}
+.seg button[aria-pressed="true"] .beta{background:rgba(255,255,255,.24);color:#fff}
+/* also carries .note, which is defined below, so it needs the extra class
+   to win on colour */
+.note.img-result{margin:10px 0 0;font-size:12px;color:var(--blue)}
+.img-result:empty{display:none}
+.note{margin:0 0 9px;font-size:12px;line-height:1.45;color:var(--ink-soft)}
+#img-file{width:100%;font-family:var(--display);font-size:12.5px;color:var(--ink-soft)}
+#img-file::file-selector-button{font-family:var(--display);font-size:13px;color:var(--ink);
+  background:#fff;border:1px solid var(--line);padding:7px 11px;margin-right:10px;cursor:pointer}
+#img-file::file-selector-button:hover{background:var(--blue-soft)}
+.img-panel{display:flex;gap:12px;margin-top:12px}
+.img-panel canvas{width:96px;height:96px;flex:none;border:1px solid var(--line);background:#fff;
+  image-rendering:pixelated}
+.img-opts{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.img-opts .label,.img-opts label{margin:0}
+.img-opts .seg button{padding:6px 2px;font-size:13px}
+.img-opts input[type="range"]{width:100%;accent-color:var(--blue);margin:0}
+.img-opts .check{margin:0;font-size:13px}
+.btn.small{padding:7px;font-size:13px}
+
 .preview{min-width:0}
 .empty{background:var(--paper);border:1px dashed var(--line);padding:70px 30px;text-align:center;color:var(--ink-soft);font-size:14.5px}
 

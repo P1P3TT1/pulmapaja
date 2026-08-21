@@ -1322,43 +1322,320 @@ const NONOGRAM_CFG = {
   hard:   {n: 20, density: 0.55, blobs: 12, symmetric: false, maxFull: 3, maxClues: 5, minRounds: 4}
 };
 
+/* The one gate every nonogram passes, whoever drew the picture.
+
+   A blank line reads as padding rather than picture, and a completely full one
+   hands the solver a free row; both are refused for generated puzzles, though
+   a picture the user supplied is allowed its blank edges. Capping how many
+   numbers a line may carry fixes how wide the clue margins can get, which is
+   what keeps a puzzle inside its share of the page. Those are cheap, so they
+   are checked before solving.
+
+   The real test is that the line logic finishes unaided. Every deduction it
+   makes is forced and the picture is a valid solution, so a complete solve is
+   also proof that this solution is the only one. */
+function nonogramAccept(fill, n, cfg) {
+  const {rows, cols} = nonogramClues(fill, n);
+
+  let blank = 0, full = 0, widest = 0;
+  for (const c of rows.concat(cols)) {
+    if (!c.length) blank++;
+    else if (c.length === 1 && c[0] === n) full++;
+    if (c.length > widest) widest = c.length;
+  }
+  if (blank && !cfg.allowBlank) return null;
+  if (full > cfg.maxFull || widest > cfg.maxClues) return null;
+
+  const res = nonogramSolve(rows, cols, n);
+  if (!res || res.unknown) return null;
+  if (res.rounds < (cfg.minRounds || 0)) return null;
+  if (res.rounds > (cfg.maxRounds || 999)) return null;
+
+  /* independent check that the solver landed on the picture it was given */
+  for (let i = 0; i < n * n; i++) {
+    if ((res.grid[i] === NG_FILL) !== !!fill[i]) return null;
+  }
+  return {rows, cols, rounds: res.rounds};
+}
+
 function makeNonogram(level) {
   const cfg = NONOGRAM_CFG[level];
   const n = cfg.n;
   for (let attempt = 0; attempt < 400; attempt++) {
     const fill = nonogramPattern(n, cfg);
-    const {rows, cols} = nonogramClues(fill, n);
+    const ok = nonogramAccept(fill, n, cfg);
+    if (ok) return {n, fill, rowClues: ok.rows, colClues: ok.cols};
+  }
+  return null;
+}
 
-    /* A blank line reads as padding rather than picture, and a completely
-       full one hands the solver a free row. Capping how many numbers a line
-       may carry also fixes how wide the clue margins can get, which is what
-       keeps a puzzle inside its share of the page. Checked before solving,
-       since it is much the cheaper test. */
-    let blank = 0, full = 0, widest = 0;
-    for (const c of rows.concat(cols)) {
-      if (!c.length) blank++;
-      else if (c.length === 1 && c[0] === n) full++;
-      if (c.length > widest) widest = c.length;
+/* ---------- nonogrammi omasta kuvasta ---------- */
+
+/* One puzzle per page, so these can be bigger and carry wider clue margins
+   than the generated sizes. Blank lines are allowed here: a picture the user
+   brought is entitled to its empty edges. */
+const NONOGRAM_IMAGE_CFG = {
+  20: {n: 20, maxFull: 6, maxClues: 6, allowBlank: true, cell: "7mm",   sol: "6mm"},
+  25: {n: 25, maxFull: 7, maxClues: 6, allowBlank: true, cell: "5.8mm", sol: "5mm"},
+  30: {n: 30, maxFull: 8, maxClues: 7, allowBlank: true, cell: "4.9mm", sol: "4.2mm"}
+};
+
+/* Average the picture down a cell at a time rather than leaning on drawImage
+   smoothing, so every browser produces the same grid. The source is centre
+   cropped to a square: padding it to shape instead would add empty rows, and
+   an empty row carries no picture. Transparency is composited onto white. */
+function imageToGray(img, n) {
+  /* a first pass into a bounded canvas keeps huge photos cheap to read back */
+  const scale = Math.min(1, 512 / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d", {willReadFrequently: true});
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+
+  const lumAt = (x, y) => {
+    const p = (y * w + x) * 4;
+    const a = data[p + 3] / 255;
+    return (0.2126 * data[p] + 0.7152 * data[p + 1] + 0.0722 * data[p + 2]) * a + 255 * (1 - a);
+  };
+
+  /* Find what the picture actually covers, so a logo sitting in a wide white
+     margin spends the grid on the subject instead of on the margin. The
+     window is still square and still a crop, only re-centred on the subject. */
+  const corner = [lumAt(0, 0), lumAt(w - 1, 0), lumAt(0, h - 1), lumAt(w - 1, h - 1)]
+    .sort((a, b) => a - b);
+  const bg = (corner[1] + corner[2]) / 2;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (Math.abs(lumAt(x, y) - bg) <= 26) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
     }
-    if (blank || full > cfg.maxFull || widest > cfg.maxClues) continue;
+  }
+  if (x1 < x0 || y1 < y0) { x0 = 0; y0 = 0; x1 = w - 1; y1 = h - 1; }
+  const pad = Math.round(Math.max(x1 - x0, y1 - y0) * 0.04);
+  x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad);
+  x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
 
-    const res = nonogramSolve(rows, cols, n);
+  const side = Math.min(Math.max(x1 - x0 + 1, y1 - y0 + 1), w, h);
+  const sx = Math.max(0, Math.min(w - side, Math.round((x0 + x1 + 1 - side) / 2)));
+  const sy = Math.max(0, Math.min(h - side, Math.round((y0 + y1 + 1 - side) / 2)));
 
-    /* Accepted only when the line logic finishes on its own. Every deduction
-       it makes is forced, and the pattern is a valid solution, so a complete
-       solve is also proof that the solution is the only one. */
-    if (!res || res.unknown) continue;
-    if (res.rounds < (cfg.minRounds || 0)) continue;
-    if (res.rounds > (cfg.maxRounds || 999)) continue;
+  const gray = new Float32Array(n * n);
+  for (let r = 0; r < n; r++) {
+    const ya = sy + Math.floor(r * side / n);
+    const yb = Math.max(ya + 1, sy + Math.floor((r + 1) * side / n));
+    for (let c = 0; c < n; c++) {
+      const xa = sx + Math.floor(c * side / n);
+      const xb = Math.max(xa + 1, sx + Math.floor((c + 1) * side / n));
+      let sum = 0, count = 0;
+      for (let y = ya; y < yb && y < h; y++) {
+        for (let x = xa; x < xb && x < w; x++) { sum += lumAt(x, y); count++; }
+      }
+      gray[r * n + c] = count ? sum / count : bg;
+    }
+  }
+  return gray;
+}
 
-    /* independent check that the solver landed on the pattern it was given */
-    let same = true;
+/* Otsu: the cut that splits the cells into dark and light with the least
+   variance inside each group. A decent starting guess for any picture, which
+   the user can then nudge. */
+function otsuThreshold(gray) {
+  const hist = new Float64Array(256);
+  for (const v of gray) hist[Math.max(0, Math.min(255, Math.round(v)))]++;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+
+  let sumB = 0, wB = 0, best = 128, bestVar = -1;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = gray.length - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const between = wB * wF * (sumB / wB - (sum - sumB) / wF) ** 2;
+    if (between > bestVar) { bestVar = between; best = t; }
+  }
+  return best;
+}
+
+function grayToBitmap(gray, n, threshold, invert) {
+  const fill = new Uint8Array(n * n);
+  for (let i = 0; i < gray.length; i++) {
+    const dark = gray[i] <= threshold;
+    fill[i] = (invert ? !dark : dark) ? 1 : 0;
+  }
+  return fill;
+}
+
+/* A lone cell, or a lone hole, adds a one-long run to two lines at once --
+   the shape line logic handles worst, and the detail a reader cannot make out
+   anyway. Worth clearing whether or not the puzzle would have solved. */
+function denoiseBitmap(fill, n) {
+  let changed = 0;
+  for (let pass = 0; pass < 4; pass++) {
+    const next = Uint8Array.from(fill);
+    let acted = false;
     for (let i = 0; i < n * n; i++) {
-      if ((res.grid[i] === NG_FILL) !== !!fill[i]) { same = false; break; }
+      if (neighbours(i, n).some(j => fill[j] === fill[i])) continue;
+      next[i] = fill[i] ? 0 : 1;
+      acted = true; changed++;
     }
-    if (!same) continue;
+    fill.set(next);
+    if (!acted) break;
+  }
+  return changed;
+}
 
-    return {n, fill, rowClues: rows, colClues: cols};
+/* Bring any over-long line within the clue cap by either dropping its
+   shortest run or closing its smallest gap, whichever moves fewer cells.
+   Fixing a row can push a column over, so it repeats. */
+function capClueRuns(fill, n, maxClues) {
+  let changed = 0;
+  for (let pass = 0; pass < 16; pass++) {
+    let acted = false;
+    for (let dir = 0; dir < 2; dir++) {
+      for (let k = 0; k < n; k++) {
+        const at = t => (dir === 0 ? k * n + t : t * n + k);
+        const runs = [];
+        let start = -1;
+        for (let t = 0; t <= n; t++) {
+          const on = t < n && fill[at(t)];
+          if (on && start < 0) start = t;
+          else if (!on && start >= 0) { runs.push([start, t - 1]); start = -1; }
+        }
+        if (runs.length <= maxClues) continue;
+
+        let run = 0;
+        for (let q = 1; q < runs.length; q++) {
+          if (runs[q][1] - runs[q][0] < runs[run][1] - runs[run][0]) run = q;
+        }
+        let gap = 1, gapLen = Infinity;
+        for (let q = 1; q < runs.length; q++) {
+          const len = runs[q][0] - runs[q - 1][1] - 1;
+          if (len < gapLen) { gapLen = len; gap = q; }
+        }
+        if (gapLen <= runs[run][1] - runs[run][0] + 1) {
+          for (let t = runs[gap - 1][1] + 1; t < runs[gap][0]; t++) { fill[at(t)] = 1; changed++; }
+        } else {
+          for (let t = runs[run][0]; t <= runs[run][1]; t++) { fill[at(t)] = 0; changed++; }
+        }
+        acted = true;
+      }
+    }
+    if (!acted) break;
+  }
+  return changed;
+}
+
+/* When the clues still leave the solver stuck, nudge the picture. The cells it
+   could not settle are where the ambiguity lives, and a 2x2 block of them is
+   the classic swap that leaves both lines' clues unchanged, so break one of
+   those first. Each candidate is scored by re-solving, which is why the budget
+   is small and the loop yields between steps. */
+async function repairBitmap(fill, n, cfg, onStep) {
+  let changed = 0;
+  for (let step = 0; step < 220; step++) {
+    capClueRuns(fill, n, cfg.maxClues);
+    if (nonogramAccept(fill, n, cfg)) return {changed, ok: true};
+
+    const {rows, cols} = nonogramClues(fill, n);
+    const res = nonogramSolve(rows, cols, n);
+    if (!res) return {changed, ok: false};
+
+    const stuck = [];
+    for (let i = 0; i < n * n; i++) if (res.grid[i] === NG_UNKNOWN) stuck.push(i);
+    if (!stuck.length) return {changed, ok: false};   /* solvable but rejected elsewhere */
+
+    const swaps = stuck.filter(i => {
+      const c = i % n;
+      return c + 1 < n && i + n + 1 < n * n &&
+        res.grid[i + 1] === NG_UNKNOWN && res.grid[i + n] === NG_UNKNOWN &&
+        res.grid[i + n + 1] === NG_UNKNOWN;
+    });
+
+    let best = null;
+    for (const i of shuffle((swaps.length ? swaps : stuck).slice()).slice(0, 5)) {
+      fill[i] ^= 1;
+      const t = nonogramClues(fill, n);
+      const r2 = nonogramSolve(t.rows, t.cols, n);
+      fill[i] ^= 1;
+      const score = r2 ? r2.unknown : Infinity;
+      if (!best || score < best.score) best = {i, score};
+    }
+    fill[best.i] ^= 1;
+    changed++;
+    if (onStep && step % 8 === 0) await onStep(changed, stuck.length);
+  }
+  return {changed, ok: !!nonogramAccept(fill, n, cfg)};
+}
+
+/* Average the picture down to half the grid, so every cell becomes a 2x2
+   block. Detail finer than the grid is what leaves the solver guessing, and
+   redrawing it coarser is a more honest answer than scattering corrections
+   over a picture that was never going to fit. */
+function coarsenGray(gray, n) {
+  const cn = Math.ceil(n / 2);
+  const sum = new Float32Array(cn * cn), count = new Float32Array(cn * cn);
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const k = (r >> 1) * cn + (c >> 1);
+      sum[k] += gray[r * n + c]; count[k]++;
+    }
+  }
+  for (let i = 0; i < sum.length; i++) sum[i] /= count[i];
+  return {gray: sum, n: cn};
+}
+
+function upscaleBitmap(small, cn, n) {
+  const out = new Uint8Array(n * n);
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      out[r * n + c] = small[Math.min(cn - 1, r >> 1) * cn + Math.min(cn - 1, c >> 1)];
+    }
+  }
+  return out;
+}
+
+async function makeNonogramFromImage(gray, size, threshold, invert, onStep) {
+  const cfg = NONOGRAM_IMAGE_CFG[size];
+  const n = cfg.n;
+  const original = grayToBitmap(gray, n, threshold, invert);
+
+  /* full detail first; if the picture is too busy for the grid to pin down,
+     redraw it at half resolution and try again */
+  for (const coarse of [false, true]) {
+    let fill;
+    if (!coarse) fill = Uint8Array.from(original);
+    else {
+      const c = coarsenGray(gray, n);
+      fill = upscaleBitmap(grayToBitmap(c.gray, c.n, threshold, invert), c.n, n);
+    }
+
+    denoiseBitmap(fill, n);
+    capClueRuns(fill, n, cfg.maxClues);
+
+    let ok = nonogramAccept(fill, n, cfg);
+    let flips = 0;
+    if (!ok) {
+      const rep = await repairBitmap(fill, n, cfg, onStep);
+      flips = rep.changed;
+      ok = nonogramAccept(fill, n, cfg);
+    }
+    if (!ok) continue;
+
+    let moved = 0;
+    for (let i = 0; i < n * n; i++) if (fill[i] !== original[i]) moved++;
+    return {n, fill, original, rowClues: ok.rows, colClues: ok.cols,
+            moved, flips, coarse, cell: cfg.cell, sol: cfg.sol};
   }
   return null;
 }
@@ -1724,18 +2001,127 @@ function buildOne(type, level, symmetric) {
    ============================================================ */
 
 const el = id => document.getElementById(id);
-const state = {type: "sudoku9", level: "easy", layout: 2, count: 4};
+const state = {type: "sudoku9", source: "random", level: "easy", layout: 2, count: 4};
 
-function bindSegment(id, key, cast) {
+function bindSegment(id, key, cast, onChange) {
   el(id).addEventListener("click", e => {
     const btn = e.target.closest("button");
     if (!btn) return;
     [...e.currentTarget.children].forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
     state[key] = cast(btn.dataset.value);
+    if (onChange) onChange();
   });
 }
 bindSegment("seg-level", "level", v => v);
 bindSegment("seg-layout", "layout", v => parseInt(v, 10));
+bindSegment("seg-source", "source", v => v, syncMode);
+
+/* Own picture. `gray` is the cropped image averaged down to the chosen grid;
+   the threshold is in luminance, so it survives a change of grid size. */
+const picture = {img: null, gray: null, size: 25, threshold: 128, invert: false};
+
+/* Only the nonogram is built from a picture, so any other type falls back to
+   the random source. Choosing the mode is separate from having chosen a file. */
+function pictureMode() {
+  return state.type === "nonogram" && state.source === "picture";
+}
+
+/* Shows the fields that belong to the current source and hides the rest, so
+   nothing is left on screen that cannot affect the result. */
+function syncMode() {
+  const nonogram = state.type === "nonogram";
+  if (!nonogram) state.source = "random";
+  const pic = pictureMode();
+  el("src-wrap").hidden = !nonogram;
+  el("img-wrap").hidden = !pic;
+  for (const id of ["field-level", "field-count", "field-layout"]) el(id).hidden = pic;
+  el("seg-source").querySelectorAll("button").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.value === state.source)));
+}
+
+function drawPicturePreview() {
+  el("img-result").textContent = "";
+  const cv = el("img-preview");
+  const n = picture.size;
+  cv.width = cv.height = n;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, n, n);
+  if (!picture.gray) return;
+  /* denoise runs on every picture, so preview what will actually be built */
+  const fill = grayToBitmap(picture.gray, n, picture.threshold, picture.invert);
+  denoiseBitmap(fill, n);
+  ctx.fillStyle = "#2A2A2A";
+  for (let i = 0; i < n * n; i++) if (fill[i]) ctx.fillRect(i % n, (i / n) | 0, 1, 1);
+}
+
+/* The live preview is only the thresholded picture; repair may move cells and
+   a busy picture is redrawn coarser, so replace it with what really printed. */
+function showPictureResult(built) {
+  const cv = el("img-preview");
+  cv.width = cv.height = built.n;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, built.n, built.n);
+  ctx.fillStyle = "#2A2A2A";
+  for (let i = 0; i < built.n * built.n; i++) {
+    if (built.fill[i]) ctx.fillRect(i % built.n, (i / built.n) | 0, 1, 1);
+  }
+  el("img-result").textContent = "Näin tehtävä tulostuu. " + (built.moved
+    ? `Kuvaa muutettiin ${built.moved} ruudun verran` +
+      (built.coarse ? " ja se yksinkertaistettiin." : ".")
+    : "Kuva sopi sellaisenaan.");
+}
+
+function refreshPicture(reGray) {
+  if (picture.img && reGray) picture.gray = imageToGray(picture.img, picture.size);
+  el("img-panel").hidden = !picture.img;
+  drawPicturePreview();
+}
+
+el("img-file").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      picture.img = img;
+      picture.gray = imageToGray(img, picture.size);
+      picture.threshold = otsuThreshold(picture.gray);
+      el("img-threshold").value = String(picture.threshold);
+      refreshPicture(false);
+      statusEl.textContent = "Kuva ladattu. Säädä raja-arvoa ja luo tehtävä.";
+    };
+    img.onerror = () => { statusEl.textContent = "Kuvaa ei voitu lukea."; };
+    /* a data: URL rather than a blob: one, so the canvas is readable even when
+       the page is opened straight from disk */
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+el("img-threshold").addEventListener("input", e => {
+  picture.threshold = parseInt(e.target.value, 10);
+  drawPicturePreview();
+});
+el("img-invert").addEventListener("change", e => {
+  picture.invert = e.target.checked;
+  drawPicturePreview();
+});
+el("seg-imgsize").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  [...e.currentTarget.children].forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  picture.size = parseInt(btn.dataset.value, 10);
+  refreshPicture(true);
+});
+el("img-clear").addEventListener("click", () => {
+  picture.img = null; picture.gray = null;
+  el("img-file").value = "";
+  refreshPicture(false);
+  statusEl.textContent = "";
+});
 
 function syncType() {
   state.type = el("type").value;
@@ -1745,6 +2131,8 @@ function syncType() {
   const wrap = el("sym-wrap");
   el("opt-symmetry").disabled = !t.symmetry;
   wrap.classList.toggle("off", !t.symmetry);
+  syncMode();
+  refreshPicture(false);
 }
 el("type").addEventListener("change", syncType);
 syncType();
@@ -1761,7 +2149,7 @@ countInput.addEventListener("change", clampCount);
 el("plus").addEventListener("click", () => { countInput.value = (parseInt(countInput.value, 10) || 0) + 1; clampCount(); });
 el("minus").addEventListener("click", () => { countInput.value = (parseInt(countInput.value, 10) || 2) - 1; clampCount(); });
 
-function buildSheet(title, level, layout, items, pageNo, pageTotal, isSolution, type) {
+function buildSheet(title, level, layout, items, pageNo, pageTotal, isSolution, type, cellSize) {
   const t = TYPES[type];
   const sheet = document.createElement("section");
   sheet.className = "sheet";
@@ -1770,7 +2158,9 @@ function buildSheet(title, level, layout, items, pageNo, pageTotal, isSolution, 
   head.className = "sheet-head";
   head.innerHTML = '<h2></h2><span class="tag"></span>';
   head.querySelector("h2").textContent = title;
-  head.querySelector(".tag").textContent = LEVEL_LABEL[level];
+  /* a puzzle built from a picture has no difficulty level, so it passes
+     its grid size here instead */
+  head.querySelector(".tag").textContent = LEVEL_LABEL[level] || level;
   sheet.appendChild(head);
 
   const body = document.createElement("div");
@@ -1779,9 +2169,11 @@ function buildSheet(title, level, layout, items, pageNo, pageTotal, isSolution, 
   body.dataset.cols = String(cols);
   body.dataset.rows = String(layout / cols);
   /* A type whose grid size changes a lot between levels can give its own
-     table per level; everything else keeps one table for all of them. */
+     table per level; everything else keeps one table for all of them. An
+     explicit size wins over both, for a grid the tables do not cover -- a
+     puzzle built from the user's own picture. */
   const table = (t.cellByLevel && t.cellByLevel[level]) || t.cell;
-  const size = isSolution ? table.sol : table[layout];
+  const size = cellSize || (isSolution ? table.sol : table[layout]);
   body.style.setProperty("--cell", size);
   body.style.setProperty("--gap", `calc(${size} * 0.42)`);
 
@@ -1818,8 +2210,15 @@ const printBtn = el("print");
 const idle = () => new Promise(r => setTimeout(r, 0));
 
 async function generate() {
-  clampCount();
-  const {type, level, layout, count} = state;
+  const fromPicture = pictureMode();
+  if (fromPicture && !picture.img) {
+    statusEl.textContent = "Valitse ensin kuva.";
+    return;
+  }
+  if (!fromPicture) clampCount();
+  const {type, level} = state;
+  const layout = fromPicture ? 1 : state.layout;
+  const count = fromPicture ? 1 : state.count;
   const t = TYPES[type];
   const symmetric = t.symmetry && el("opt-symmetry").checked;
   const withSolutions = el("opt-solutions").checked;
@@ -1833,37 +2232,72 @@ async function generate() {
 
   const items = [];
   let failed = 0;
-  for (let n = 1; n <= count; n++) {
-    statusEl.textContent = `Luodaan tehtäviä… ${n}/${count}`;
+  let note = "";
+  let cellSize = null, solCellSize = null;
+  let sheetTag = level;
+
+  if (fromPicture) {
+    statusEl.textContent = "Luodaan tehtävää kuvasta…";
     await idle();
-    const data = buildOne(type, level, symmetric);
-    if (!data) { failed++; continue; }
-    items.push({number: items.length + 1, data});
+    const built = await makeNonogramFromImage(
+      picture.gray, picture.size, picture.threshold, picture.invert,
+      async changed => {
+        statusEl.textContent = `Sovitetaan kuvaa… ${changed} ruutua muutettu`;
+        await idle();
+      });
+    if (built) {
+      items.push({number: 1, data: {kind: "nonogram", n: built.n, fill: built.fill,
+                                    rowClues: built.rowClues, colClues: built.colClues}});
+      cellSize = built.cell;
+      solCellSize = built.sol;
+      sheetTag = `${built.n} × ${built.n}`;
+      showPictureResult(built);
+      note = built.moved
+        ? ` Kuvaa muutettiin ${built.moved} ruudun verran${built.coarse ? " ja yksinkertaistettiin" : ""}.`
+        : " Kuva sopi sellaisenaan.";
+    } else {
+      failed++;
+    }
+  } else {
+    for (let n = 1; n <= count; n++) {
+      statusEl.textContent = `Luodaan tehtäviä… ${n}/${count}`;
+      await idle();
+      const data = buildOne(type, level, symmetric);
+      if (!data) { failed++; continue; }
+      items.push({number: items.length + 1, data});
+    }
   }
 
   if (!items.length) {
-    statusEl.textContent = "Tehtävien luonti ei onnistunut. Yritä uudelleen.";
+    statusEl.textContent = fromPicture
+      ? "Kuvasta ei saatu ratkeavaa tehtävää. Kokeile toista raja-arvoa, kokoa tai kuvaa."
+      : "Tehtävien luonti ei onnistunut. Yritä uudelleen.";
     generateBtn.disabled = false;
     return;
   }
 
   const pages = chunk(items, layout);
-  const solPages = withSolutions ? chunk(items, 6) : [];
+  /* one picture makes one solution, so give it the page rather than
+     stranding it in the six-up grid */
+  const solLayout = fromPicture ? 1 : 6;
+  const solPages = withSolutions ? chunk(items, solLayout) : [];
   const total = pages.length + solPages.length;
 
   const frag = document.createDocumentFragment();
   let page = 0;
   pages.forEach(group => {
     page++;
-    frag.appendChild(buildSheet(title, level, layout, group, page, total, false, type));
+    frag.appendChild(buildSheet(title, sheetTag, layout, group, page, total, false, type, cellSize));
   });
   solPages.forEach(group => {
     page++;
-    frag.appendChild(buildSheet(title + " – ratkaisut", level, 6, group, page, total, true, type));
+    frag.appendChild(buildSheet(title + " – ratkaisut", sheetTag, solLayout, group, page, total,
+                                true, type, solCellSize));
   });
   previewEl.appendChild(frag);
 
-  statusEl.textContent = `${items.length} tehtävää, ${total} sivua.` + (failed ? ` ${failed} ei syntynyt.` : "");
+  statusEl.textContent = `${items.length} tehtävää, ${total} sivua.` +
+    (failed ? ` ${failed} ei syntynyt.` : "") + note;
   generateBtn.disabled = false;
   printBtn.disabled = false;
   window.scrollTo({top: 0, behavior: "smooth"});

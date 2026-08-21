@@ -38,7 +38,42 @@
           </select>
         </div>
 
-        <div class="field">
+        <div class="field" id="src-wrap" hidden>
+          <span class="label" id="lbl-lahde">Lähde</span>
+          <div class="seg" role="group" aria-labelledby="lbl-lahde" id="seg-source">
+            <button type="button" data-value="random" aria-pressed="true">Satunnainen</button>
+            <button type="button" data-value="picture" aria-pressed="false">Oma kuva <span class="beta">beta</span></button>
+          </div>
+        </div>
+
+        <div class="field" id="img-wrap" hidden>
+          <div class="field-head">
+            <span class="label" id="lbl-kuva">Oma kuva</span>
+            <span class="beta">beta</span>
+          </div>
+          <p class="note">Kuva käsitellään selaimessasi eikä sitä lähetetä mihinkään.
+            Kuva sovitetaan ruudukkoon, ja sitä voidaan joutua muuttamaan hieman.
+            Kaikista kuvista ei synny ratkeavaa tehtävää.</p>
+          <input type="file" id="img-file" accept="image/*">
+          <div class="img-panel" id="img-panel" hidden>
+            <canvas id="img-preview" width="30" height="30" aria-label="Esikatselu"></canvas>
+            <div class="img-opts">
+              <span class="label" id="lbl-koko">Ruudukon koko</span>
+              <div class="seg" role="group" aria-labelledby="lbl-koko" id="seg-imgsize">
+                <button type="button" data-value="20" aria-pressed="false">20</button>
+                <button type="button" data-value="25" aria-pressed="true">25</button>
+                <button type="button" data-value="30" aria-pressed="false">30</button>
+              </div>
+              <label for="img-threshold">Raja-arvo</label>
+              <input type="range" id="img-threshold" min="1" max="254" value="128">
+              <label class="check"><input type="checkbox" id="img-invert"> Käännä värit</label>
+              <button type="button" class="btn ghost small" id="img-clear">Poista kuva</button>
+            </div>
+          </div>
+          <p class="note img-result" id="img-result"></p>
+        </div>
+
+        <div class="field" id="field-level">
           <span class="label" id="lbl-taso">Vaikeustaso</span>
           <div class="seg" role="group" aria-labelledby="lbl-taso" id="seg-level">
             <button type="button" data-value="easy" aria-pressed="true">Helppo</button>
@@ -47,7 +82,7 @@
           </div>
         </div>
 
-        <div class="field">
+        <div class="field" id="field-count">
           <label for="count">Tehtävien määrä</label>
           <div class="stepper">
             <button type="button" id="minus" aria-label="Vähennä yhdellä">–</button>
@@ -56,7 +91,7 @@
           </div>
         </div>
 
-        <div class="field">
+        <div class="field" id="field-layout">
           <span class="label" id="lbl-sivu">Tehtäviä sivulla</span>
           <div class="seg" role="group" aria-labelledby="lbl-sivu" id="seg-layout">
             <button type="button" data-value="1" aria-pressed="false">1</button>

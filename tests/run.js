@@ -250,7 +250,9 @@ test("codec error messages", () => {
   expect(withHeader(2, bytes[1]), G.CODE_MSG.version(2));
   expect(withHeader(1, 13), G.CODE_MSG.type);
   expect(withHeader(1, 0), G.CODE_MSG.type);
-  expect(code.slice(0, 30) + (code[30] === "A" ? "B" : "A") + code.slice(31), G.CODE_MSG.damaged);
+  /* a single-bit change always breaks the checksum; arbitrary substitutions
+     need not (see the sweep below) */
+  expect(code.slice(0, 30) + G.B64[G.B64.indexOf(code[30]) ^ 1] + code.slice(31), G.CODE_MSG.damaged);
   /* the right checksum over a body that ends early */
   const h = [1, bytes[1]], body = G.scramble(bytes.slice(2, -1), [bytes[0], bytes[1]]).slice(0, 20);
   expect(G.toB64(h.concat(G.scramble(body, h), [G.checksum(h.concat(body))])), G.CODE_MSG.short);

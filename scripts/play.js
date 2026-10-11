@@ -970,6 +970,13 @@ window.Play = (() => {
       setHash("");
     }
     const pv = window.PULMAPAJA_PREVIEW;
+    /* a print preview starts on generated sheets (phase 6: their QR codes) */
+    if (pv && pv.mode === "print") {
+      const [type, level] = String(pv.open || "").split(":");
+      if (TYPES[type]) setRail(type, LEVEL_LABEL[level] ? level : "easy");
+      generate();
+      return;
+    }
     if (pv && pv.mode === "play") {
       const [type, level] = String(pv.open || "").split(":");
       if (TYPES[type]) setRail(type, LEVEL_LABEL[level] ? level : "easy");

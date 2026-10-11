@@ -1,6 +1,9 @@
 // Builds the single-file artifact preview of the app (docs/ratkaise-ruudulla.md §10).
 //
-//   node tools/build-preview.mjs --open <type>:<level>
+//   node tools/build-preview.mjs --open <type>:<level> [--mode print] [--play-url <url>]
+//
+// --mode print starts on generated print sheets instead of play mode, and
+// --play-url overrides PLAY_BASE_URL in script.js for this build only.
 //
 // Writes previews/pulmapaja-preview.html: index.html with the stylesheet and
 // every local script inlined, no document wrappers (the artifact host adds
@@ -15,10 +18,11 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = p => readFileSync(join(ROOT, p), "utf8");
 
 const args = process.argv.slice(2);
-const at = args.indexOf("--open");
-const open = at >= 0 ? args[at + 1] : "sudoku9:easy";
-if (!/^[a-z0-9]+:(easy|medium|hard)$/.test(open || "")) {
-  console.error("usage: node tools/build-preview.mjs --open <type>:<easy|medium|hard>");
+const arg = (name, fallback) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : fallback; };
+const open = arg("--open", "sudoku9:easy"), mode = arg("--mode", "play"), playUrl = arg("--play-url", "");
+if (!/^[a-z0-9]+:(easy|medium|hard)$/.test(open || "") || !["play", "print"].includes(mode) ||
+    (playUrl && !/^https?:\/\/[^\s"\\]+$/.test(playUrl))) {
+  console.error("usage: node tools/build-preview.mjs --open <type>:<easy|medium|hard> [--mode play|print] [--play-url <url>]");
   process.exit(1);
 }
 
@@ -34,6 +38,16 @@ const scripts = [...head.matchAll(/<script src="(?!https?:)([^"]+)"[^>]*><\/scri
 /* a literal </script> inside a script would end the inline block early */
 const inlineJs = s => s.replace(/<\/script/gi, "<\\/script");
 
+const BASE_URL = /^const PLAY_BASE_URL = "[^"]*";$/m;
+const source = p => {
+  let js = read(p);
+  if (p === "scripts/script.js" && playUrl) {
+    if (!BASE_URL.test(js)) { console.error(`${p}: the PLAY_BASE_URL line was not found`); process.exit(1); }
+    js = js.replace(BASE_URL, `const PLAY_BASE_URL = ${JSON.stringify(playUrl)};`);
+  }
+  return js;
+};
+
 const out = [
   title,
   ...fontLinks,
@@ -43,9 +57,9 @@ const out = [
   "#print,#pdf-hint{display:none!important}",
   "</style>",
   body.trim(),
-  `<script>window.PULMAPAJA_PREVIEW = ${JSON.stringify({mode: "play", open})};</script>`,
+  `<script>window.PULMAPAJA_PREVIEW = ${JSON.stringify({mode, open})};</script>`,
   "<script>",
-  scripts.map(p => `/* ---- ${p} ---- */\n` + inlineJs(read(p))).join("\n"),
+  scripts.map(p => `/* ---- ${p} ---- */\n` + inlineJs(source(p))).join("\n"),
   "</script>",
   ""
 ].join("\n");
@@ -53,4 +67,4 @@ const out = [
 mkdirSync(join(ROOT, "previews"), {recursive: true});
 writeFileSync(join(ROOT, "previews/pulmapaja-preview.html"), out);
 console.log(`previews/pulmapaja-preview.html  ${(out.length / 1024).toFixed(0)} kB  ` +
-  `${scripts.length} scripts inlined (${scripts.join(", ")})  open ${open}`);
+  `${scripts.length} scripts inlined (${scripts.join(", ")})  ${mode} ${open}` + (playUrl ? `  PLAY_BASE_URL ${playUrl}` : ""));

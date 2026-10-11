@@ -212,7 +212,7 @@ Labels, notes and buttons come from the reference preview:
 
 ### 6.6 Hash routing
 
-- **On load:** if `location.hash` holds a code (base64url, at least 20 characters), switch to play mode and open it. If decoding fails, stay in print mode and show the §4.2 message in the status line.
+- **On load:** if `location.hash` holds a code (base64url, at least 16 characters – the shortest possible code, an easy hashi), switch to play mode and open it. If decoding fails, stay in print mode and show the §4.2 message in the status line.
 - **While playing:** keep the puzzle-only code in the hash with `history.replaceState`, so bookmarking or reloading resumes. Wrap it in try/catch.
 - **Leaving play mode** clears the hash.
 

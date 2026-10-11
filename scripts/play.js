@@ -11,7 +11,7 @@ window.Play = (() => {
   /* the types play mode can show so far; the others follow phase by phase */
   const PLAYABLE = new Set(["sudoku9"]);
   const NOT_YET = "Tämän pulmatyypin ratkaiseminen ruudulla ei ole vielä käytössä. Sen voi kuitenkin tulostaa.";
-  const CODE_IN_HASH = /^[A-Za-z0-9_-]{20,}$/;
+  const CODE_IN_HASH = new RegExp(`^[A-Za-z0-9_-]{${CODE_MIN_LENGTH},}$`);
 
   const $ = id => document.getElementById(id);
   const playEl = $("play"), boardEl = $("play-board"), padEl = $("play-pad");

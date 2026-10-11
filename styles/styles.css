@@ -125,6 +125,26 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .grid .kdots .kdot.half{fill:#000;stroke:none}
 .grid .kdots .kdot.ring{fill:none;stroke:#000;stroke-width:0.05}
 
+/* killer-sudoku. The cage outlines are drawn in viewBox units, like the kropki
+   dots, rather than with a non-scaling stroke: browsers disagree on how a
+   dash pattern scales under vector-effect, while plain viewBox units scale
+   the same everywhere. Width and dashes follow the cell size. */
+.grid.killer .cell{position:relative;font-size:calc(var(--cell)*0.5);padding-top:calc(var(--cell)*0.1)}
+.grid .kcages{position:absolute;inset:0;pointer-events:none}
+.grid .kcages path{fill:none;stroke:#555;stroke-width:0.025;stroke-dasharray:0.09 0.06;stroke-linecap:butt}
+.grid .ksum{position:absolute;left:calc(var(--cell)*0.03);top:calc(var(--cell)*0.03);z-index:1;
+  padding:0 calc(var(--cell)*0.025);background:#fff;font-family:var(--mono);font-weight:600;
+  font-size:calc(var(--cell)*0.24);line-height:1;color:#000}
+
+/* pilvenpiirtäjät. The clue strips are padded by the play grid's border
+   width, as the nonogram's are, so each clue lines up with its row or column. */
+.sky{display:grid;grid-template-columns:var(--cell) auto var(--cell);grid-template-rows:var(--cell) auto var(--cell)}
+.sky-strip{display:grid}
+.sky-strip.h{grid-auto-flow:column;grid-auto-columns:var(--cell);padding:0 0.9mm}
+.sky-strip.v{grid-auto-rows:var(--cell);padding:0.9mm 0}
+.sky .clue{display:flex;align-items:center;justify-content:center;width:var(--cell);height:var(--cell);
+  font-family:var(--mono);font-weight:600;font-size:calc(var(--cell)*0.5);line-height:1;color:#000}
+
 /* nonogrammi. The clue blocks sit outside the play grid, so both are padded by
    its border width to keep their tracks lined up with the cells. */
 .ngram{display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto}

@@ -93,8 +93,12 @@ function buildSpec(kind) {
   if (kind === "sudoku6")  { n = 6; regionOf = i => Math.floor(i / 12) * 2 + Math.floor((i % 6) / 3); }
   if (kind === "diagonal") { n = 9; regionOf = i => Math.floor(i / 27) * 3 + Math.floor((i % 9) / 3); diagonals = true; }
   if (kind === "jigsaw")   { n = 9; regionMap = jigsawRegions(); regionOf = i => regionMap[i]; }
+  /* plain Latin squares, rows and columns only: "latin4" … "latin9".
+     Futoshiki keeps its own names for the 5 × 5 and 6 × 6 squares. */
   if (kind === "futoshiki"){ n = 5; }
   if (kind === "futoshiki6"){ n = 6; }
+  const latin = /^latin([4-9])$/.exec(kind);
+  if (latin) n = Number(latin[1]);
 
   const N = n * n, FULL = (1 << n) - 1;
   const units = [];
@@ -309,19 +313,49 @@ function logicSolve(spec, puzzle, level, propagate) {
 
 
 
-/* independent solution counting, does not use the logic solver */
-function countSolutions(spec, puzzle, limit, extraOk) {
-  const {N, n, peers} = spec;
+/* Independent solution counting, does not use the logic solver. Stops at
+   `limit` solutions or at the step cap, whichever comes first. A capped search
+   has not seen the whole tree, so its count proves nothing: callers must treat
+   aborted=true as a failed check, never as "unique".
+   extraOk(v, i, d, free) is asked with d already written into v[i]; free[j]
+   holds the digits the units of each empty cell j still leave it, as they
+   stood before d went in. It filters every empty cell's options before the
+   branch cell is picked, so a variant's own rules steer the search and not
+   just the plain row/column/box ones. */
+function countSolutions(spec, puzzle, limit, extraOk, maxSteps = 2000000) {
+  const {N, n, peers, units} = spec;
   const v = Uint8Array.from(puzzle);
-  let count = 0, steps = 0;
-  function go() {
-    if (++steps > 2000000) return true;
-    let best = -1, bestMask = 0, bestN = n + 1;
+  const FULL = (1 << n) - 1;
+  const freeAt = [];
+  let count = 0, steps = 0, aborted = false;
+  function go(depth) {
+    if (++steps > maxSteps) { aborted = true; return true; }
+    const free = freeAt[depth] ||= new Uint16Array(N);
     for (let i = 0; i < N; i++) {
       if (v[i]) continue;
       let used = 0;
       for (const p of peers[i]) if (v[p]) used |= bitOf(v[p]);
-      const mask = ((1 << n) - 1) & ~used;
+      free[i] = FULL & ~used;
+      if (!free[i]) return false;
+    }
+    /* every unit holds every digit, so each must still have a place for each */
+    for (const u of units) {
+      let room = 0;
+      for (const i of u.cells) room |= v[i] ? bitOf(v[i]) : free[i];
+      if (room !== FULL) return false;
+    }
+    let best = -1, bestMask = 0, bestN = n + 1;
+    for (let i = 0; i < N; i++) {
+      if (v[i]) continue;
+      let mask = free[i];
+      if (extraOk) {
+        for (let d = 1; d <= n; d++) {
+          if (!(mask & bitOf(d))) continue;
+          v[i] = d;
+          if (!extraOk(v, i, d, free)) mask &= ~bitOf(d);
+        }
+        v[i] = 0;
+      }
       const c = popcount(mask);
       if (c === 0) return false;
       if (c < bestN) { bestN = c; best = i; bestMask = mask; if (c === 1) break; }
@@ -330,13 +364,13 @@ function countSolutions(spec, puzzle, limit, extraOk) {
     for (let d = 1; d <= n; d++) {
       if (!(bestMask & bitOf(d))) continue;
       v[best] = d;
-      if ((!extraOk || extraOk(v, best, d)) && go()) return true;
+      if (go(depth + 1)) return true;
       v[best] = 0;
     }
     return false;
   }
-  go();
-  return count;
+  go(0);
+  return {count, aborted, steps};
 }
 
 const TARGETS = {
@@ -578,7 +612,8 @@ function makeKropkiPropagator(dots) {
 }
 
 /* independent check: brute-force count using the same dot relations,
-   to guard the propagator above against silently under-constraining */
+   to guard the propagator above against silently under-constraining.
+   Returns {count, aborted}, like countSolutions. */
 function countKropkiSolutions(spec, dots, puzzle, limit) {
   const {N, n, peers} = spec;
   const v = Uint8Array.from(puzzle);
@@ -603,9 +638,9 @@ function countKropkiSolutions(spec, dots, puzzle, limit) {
     }
   }
 
-  let count = 0, steps = 0;
+  let count = 0, steps = 0, aborted = false;
   function go() {
-    if (++steps > 2000000) return true;
+    if (++steps > 2000000) { aborted = true; return true; }
     if (!propagate()) return false;
     let best = -1, bestN = n + 1;
     for (let i = 0; i < N; i++) {
@@ -626,7 +661,7 @@ function countKropkiSolutions(spec, dots, puzzle, limit) {
     return false;
   }
   go();
-  return count;
+  return {count, aborted};
 }
 
 const KROPKI_TARGETS = {easy: 24, medium: 12, hard: 0};
@@ -662,7 +697,8 @@ function makeKropki(level) {
     /* the dot layout alone (zero givens) must be fully logic-solvable,
        otherwise this solution can never support a puzzle at any level */
     if (!logicSolve(spec, new Uint8Array(spec.N), 3, propagate)) continue;
-    if (countKropkiSolutions(spec, dots, new Uint8Array(spec.N), 2) !== 1) continue;
+    const check = countKropkiSolutions(spec, dots, new Uint8Array(spec.N), 2);
+    if (check.aborted || check.count !== 1) continue;
 
     let best = null;
     for (let d = 0; d < 8; d++) {
@@ -946,7 +982,276 @@ function makeKakuro(level) {
   return null;
 }
 
+/* ---------- killer-sudoku ---------- */
 
+/* Runs the logic solver tier by tier, cheapest first, the way the sudoku and
+   kropki diggers do: most removals settle at tier 1 and never pay for more. */
+function logicSolveUpTo(spec, puz, tier, propagate) {
+  for (let t = 1; t <= tier; t++) if (logicSolve(spec, puz, t, propagate)) return true;
+  return false;
+}
+
+/* Cages are grown from a finished solution, so the sums and the no-repeat
+   rule hold for it by construction. They are built one at a time in the
+   jigsaw style: each starts from the free cell with the fewest free
+   neighbours, so tight corners are claimed first and no cell gets stranded.
+   A cage only grows into a cell whose digit it does not already hold. */
+function killerCages(sol, sizes) {
+  const n = 9, total = 81;
+  const freeNbrs = (cageOf, i) => neighbours(i, n).filter(j => cageOf[j] === -1).length;
+
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const cageOf = new Int16Array(total).fill(-1);
+    const groups = [];
+    for (;;) {
+      let start = -1, fewest = 99;
+      for (const i of shuffle([...Array(total).keys()])) {
+        if (cageOf[i] !== -1) continue;
+        const f = freeNbrs(cageOf, i);
+        if (f < fewest) { fewest = f; start = i; }
+      }
+      if (start === -1) break;
+      const k = groups.length, cells = [start];
+      let used = bitOf(sol[start]);
+      cageOf[start] = k;
+      const target = sizes[Math.floor(Math.random() * sizes.length)];
+      while (cells.length < target) {
+        const frontier = [];
+        for (const i of cells) for (const j of neighbours(i, n)) {
+          if (cageOf[j] === -1 && !(used & bitOf(sol[j])) && !frontier.includes(j)) frontier.push(j);
+        }
+        if (!frontier.length) break;
+        let pick = -1, few = 99;
+        for (const j of shuffle(frontier)) {
+          const f = freeNbrs(cageOf, j);
+          if (f < few) { few = f; pick = j; }
+        }
+        cageOf[pick] = k; cells.push(pick); used |= bitOf(sol[pick]);
+      }
+      groups.push({cells, used});
+    }
+
+    /* A one-cell cage is just a given in disguise. Fold each into the
+       smallest neighbouring cage that lacks its digit; at most one may stay. */
+    let ok = true, singles = 0;
+    for (const g of shuffle(groups.filter(g => g.cells.length === 1))) {
+      if (g.cells.length !== 1) continue;
+      const i = g.cells[0], bt = bitOf(sol[i]);
+      let into = -1;
+      for (const j of neighbours(i, n)) {
+        const h = groups[cageOf[j]];
+        if (h === g || (h.used & bt)) continue;
+        if (into === -1 || h.cells.length < groups[into].cells.length) into = cageOf[j];
+      }
+      if (into === -1) {
+        if (++singles > 1) { ok = false; break; }
+        continue;
+      }
+      groups[into].cells.push(i); groups[into].used |= bt;
+      g.cells = [];
+      cageOf[i] = into;
+    }
+    if (!ok) continue;
+
+    const cages = groups.filter(g => g.cells.length)
+      .map(g => g.cells.sort((a, b) => a - b))
+      .sort((a, b) => a[0] - b[0])
+      .map(cells => ({cells, sum: cells.reduce((s, i) => s + sol[i], 0)}));
+    const out = new Int16Array(total);
+    cages.forEach((c, k) => { for (const i of c.cells) out[i] = k; });
+    return {cages, cageOf: out};
+  }
+  return null;
+}
+
+/* Kakuro's sum logic applied to cages: a combination of digits survives only
+   if every cell can hold one of its digits and every one of its digits fits
+   some cell. A cell keeps only digits from surviving combinations, minus any
+   digit already placed in the cage. A digit common to every surviving
+   combination that only one cell can still take goes in that cell.
+   Cages are deliberately not units: hiddenSingles and lockedCandidates
+   assume every unit holds all n digits, which a cage does not. */
+function makeKillerPropagator(cages, extra) {
+  /* hard level only: the 45-rule cages, and for every cage (real or virtual)
+     the units it lies wholly inside, where a digit the cage must hold can be
+     struck from the rest of the unit */
+  const all = extra ? cages.concat(extra.virtual) : cages;
+  const homes = all.map(c => extra
+    ? extra.spec.units.map(u => u.cells).filter(u => c.cells.every(i => u.includes(i)))
+    : []);
+  return (cand, v, elim, place) => {
+    let ch = false;
+    for (let q = 0; q < all.length; q++) {
+      const {cells, sum} = all[q];
+      const L = cells.length;
+      let any = 0, placed = 0;
+      const masks = cells.map(i => {
+        const m = v[i] ? bitOf(v[i]) : cand[i];
+        any |= m;
+        if (v[i]) placed |= m;
+        return m;
+      });
+      const allow = new Array(L).fill(0);
+      let common = 511;
+      for (const m of (COMBOS[L] && COMBOS[L][sum]) || []) {
+        if ((any & m) !== m) continue;
+        let fits = true;
+        for (let k = 0; k < L && fits; k++) if (!(masks[k] & m)) fits = false;
+        if (!fits) continue;
+        common &= m;
+        for (let k = 0; k < L; k++) allow[k] |= m;
+      }
+      for (let k = 0; k < L; k++) {
+        if (!v[cells[k]] && elim(cells[k], 511 & ~(allow[k] & ~placed))) ch = true;
+      }
+      if (!allow[0]) continue;
+      for (let d = 1; d <= 9; d++) {
+        const bt = bitOf(d);
+        if (!(common & bt) || (placed & bt)) continue;
+        let pos = -1, cnt = 0;
+        for (const i of cells) if (!v[i] && (cand[i] & bt)) { cnt++; pos = i; }
+        if (cnt === 1) { place(pos, d); placed |= bt; ch = true; }
+        else for (const u of homes[q]) for (const i of u) {
+          if (!cells.includes(i) && elim(i, bt)) ch = true;
+        }
+      }
+    }
+    return ch;
+  };
+}
+
+/* The 45 rule. Every row, column and box holds 1–9 once and so sums to 45,
+   and a run of whole rows or columns to a multiple of it. The cages lying
+   wholly inside such a region leave a few cells over whose total is then
+   known (innies); the cages poking out of it leave a few cells outside whose
+   total is known too (outies). Either set becomes a virtual cage, provided its
+   digits are bound to differ: one cell, or cells that all see each other. */
+function killerVirtualCages(spec, cages, cageOf) {
+  const regions = spec.units.map(u => u.cells);
+  for (let w = 2; w <= 4; w++) {
+    for (let a = 0; a + w <= 9; a++) {
+      const rows = [], cols = [];
+      for (let r = a; r < a + w; r++) for (let c = 0; c < 9; c++) { rows.push(r * 9 + c); cols.push(c * 9 + r); }
+      regions.push(rows, cols);
+    }
+  }
+  const sees = (a, b) => cageOf[a] === cageOf[b] || spec.peers[a].includes(b);
+  const distinct = cells => cells.every((a, x) => cells.every((b, y) => x <= y || sees(a, b)));
+
+  const out = [], seen = new Set();
+  const add = (cells, sum) => {
+    if (!cells.length || cells.length > 4 || !distinct(cells)) return;
+    cells.sort((a, b) => a - b);
+    const key = cells.join(",") + "=" + sum;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({cells, sum});
+  };
+  for (const region of regions) {
+    const inside = new Set(region);
+    const total = 45 * region.length / 9;
+    let innerSum = 0, outerSum = 0;
+    const covered = new Set(), outside = [];
+    for (const k of new Set(region.map(i => cageOf[i]))) {
+      const {cells, sum} = cages[k];
+      outerSum += sum;
+      if (cells.every(i => inside.has(i))) { innerSum += sum; cells.forEach(i => covered.add(i)); }
+      else for (const i of cells) if (!inside.has(i)) outside.push(i);
+    }
+    add(region.filter(i => !covered.has(i)), total - innerSum);
+    add(outside, outerSum - total);
+  }
+  return out;
+}
+
+/* independent check: plain backtracking from countSolutions, with the cage
+   rules as its only extra knowledge. Never touches the logic solver. A cage
+   stays open while some set of distinct digits still adds up to its sum,
+   holds every digit already placed in it, and can be spread over its empty
+   cells using only digits their rows, columns and boxes leave free. */
+function countKillerSolutions(spec, cages, cageOf, puzzle) {
+  const cageOk = (v, i, d, free) => {
+    const {cells, sum} = cages[cageOf[i]];
+    let used = 0;
+    for (const j of cells) {
+      if (!v[j]) continue;
+      if (j !== i && v[j] === d) return false;
+      used |= bitOf(v[j]);
+    }
+    for (const m of COMBOS[cells.length][sum] || []) {
+      if ((m & used) !== used) continue;
+      const rest = m & ~used;
+      let union = 0, fits = true;
+      for (const j of cells) {
+        if (v[j]) continue;
+        if (!(free[j] & rest)) { fits = false; break; }
+        union |= free[j];
+      }
+      if (fits && (union & rest) === rest) return true;
+    }
+    return false;
+  };
+  /* a few hundred thousand steps is seconds here; a layout that needs more
+     is cheaper to replace than to prove */
+  return countSolutions(spec, puzzle, 2, cageOk, 250000);
+}
+
+/* Smaller cages admit fewer digit combinations, so they make for an easier
+   puzzle. targetGivens is where digging stops.
+   Hard aims for no givens at all. Random cages pin down the whole grid on
+   their own only rarely (about one layout in thirty with these sizes), but
+   testing a layout takes a few milliseconds, so hard simply tries many
+   (zeroTries) before settling for the fewest givens that digging reaches. */
+const KILLER_CFG = {
+  easy:   {sizes: [2, 2, 2, 3, 3],    tier: 1, targetGivens: 10, layouts: 12},
+  medium: {sizes: [2, 2, 3, 3, 4],    tier: 1, targetGivens: 2,  layouts: 24},
+  hard:   {sizes: [2, 2, 3, 3, 4, 5], tier: 3, targetGivens: 0,  layouts: 160, zeroTries: 150, rule45: true}
+};
+
+function digKillerOnce(spec, propagate, sol, cfg) {
+  const puz = Uint8Array.from(sol);
+  let givens = spec.N;
+  for (const i of shuffle([...Array(spec.N).keys()])) {
+    const saved = puz[i];
+    puz[i] = 0;
+    if (!logicSolveUpTo(spec, puz, cfg.tier, propagate)) { puz[i] = saved; continue; }
+    if (--givens <= cfg.targetGivens) break;
+  }
+  return {puz, givens};
+}
+
+/* Each try is a fresh solution with a fresh cage layout. Whatever is kept
+   passes the independent count first; an aborted count is a failed try. */
+function makeKiller(level) {
+  const cfg = KILLER_CFG[level];
+  const spec = buildSpec("sudoku9");
+  let best = null;
+  for (let l = 0; l < cfg.layouts; l++) {
+    const sol = generateSolution(spec);
+    if (!sol) continue;
+    const layout = killerCages(sol, cfg.sizes);
+    if (!layout) continue;
+    const propagate = makeKillerPropagator(layout.cages, cfg.rule45 ? {
+      spec, virtual: killerVirtualCages(spec, layout.cages, layout.cageOf)} : null);
+
+    /* the cages alone may already settle the grid at this tier; if they
+       don't, dig anyway and take the fewest givens the layout allows */
+    let r;
+    const empty = new Uint8Array(spec.N);
+    if (cfg.targetGivens === 0 && logicSolveUpTo(spec, empty, cfg.tier, propagate)) {
+      r = {puz: empty, givens: 0};
+    } else if (l >= (cfg.zeroTries || 0)) {
+      r = digKillerOnce(spec, propagate, sol, cfg);
+    } else continue;
+    if (best && r.givens >= best.givens) continue;
+
+    const check = countKillerSolutions(spec, layout.cages, layout.cageOf, r.puz);
+    if (check.aborted || check.count !== 1) continue;
+    best = {spec, solution: sol, puz: r.puz, givens: r.givens, ...layout};
+    if (best.givens <= cfg.targetGivens) break;
+  }
+  return best;
+}
 
 
 
@@ -1145,6 +1450,194 @@ function makeHitori(level) {
     let count = 0;
     for (let i = 0; i < n * n; i++) if (shaded[i] === BLACK) count++;
     return {n, values: val, shaded, black: count};
+  }
+  return null;
+}
+
+/* ---------- pilvenpiirtäjät ---------- */
+
+const SKY_SIDES = ["top", "bottom", "left", "right"];
+
+/* how many buildings show when the line is read from its first cell on */
+function skyVisible(heights) {
+  let seen = 0, tallest = 0;
+  for (const h of heights) if (h > tallest) { tallest = h; seen++; }
+  return seen;
+}
+
+/* Every ordering of 1..n, bucketed by the clue pair it satisfies:
+   SKY_PERMS[n][front][back], where 0 stands for a hidden clue. Each entry is
+   a flat array of digit bits, n per ordering, ready to test against masks.
+   That's 120, 720 or 5040 orderings, built once per size. */
+const SKY_PERMS = {};
+function skyPerms(n) {
+  if (SKY_PERMS[n]) return SKY_PERMS[n];
+  const lists = Array.from({length: n + 1}, () => Array.from({length: n + 1}, () => []));
+  const p = [];
+  (function rec(used) {
+    if (p.length === n) {
+      const f = skyVisible(p), b = skyVisible(p.slice().reverse());
+      const bits = p.map(bitOf);
+      for (const ff of [f, 0]) for (const bb of [b, 0]) lists[ff][bb].push(...bits);
+      return;
+    }
+    for (let d = 1; d <= n; d++) {
+      if (used & bitOf(d)) continue;
+      p.push(d); rec(used | bitOf(d)); p.pop();
+    }
+  })(0);
+  return SKY_PERMS[n] = lists.map(row => row.map(l => Uint16Array.from(l)));
+}
+
+/* Rows read left to right and columns top to bottom; the first clue of a
+   line is the one at its start, the second the one at its end. */
+function skyLines(n, clues) {
+  const lines = [];
+  for (let r = 0; r < n; r++) {
+    lines.push({cells: Array.from({length: n}, (_, c) => r * n + c), front: clues.left[r], back: clues.right[r]});
+  }
+  for (let c = 0; c < n; c++) {
+    lines.push({cells: Array.from({length: n}, (_, r) => r * n + c), front: clues.top[c], back: clues.bottom[c]});
+  }
+  return lines;
+}
+
+/* Line by line: keep the orderings that match the line's clues and fit every
+   cell's candidates, and a cell keeps only the heights some survivor puts
+   there. Lines without clues are left to the plain row and column logic.
+   Filtering is idempotent, so a line whose masks are just as this filter
+   left them last time is skipped; with seven-wide lines that is most of the
+   work saved. */
+function makeSkyscraperPropagator(spec, clues) {
+  const {n, FULL} = spec;
+  const perms = skyPerms(n);
+  const lines = skyLines(n, clues)
+    .filter(l => l.front || l.back)
+    .map(l => ({cells: l.cells, list: perms[l.front || 0][l.back || 0], last: new Uint16Array(n)}));
+  const masks = new Uint16Array(n), allow = new Uint16Array(n);
+  return (cand, v, elim) => {
+    let ch = false;
+    for (const line of lines) {
+      const {cells, list, last} = line;
+      let same = true;
+      for (let k = 0; k < n; k++) {
+        const i = cells[k];
+        masks[k] = v[i] ? bitOf(v[i]) : cand[i];
+        if (masks[k] !== last[k]) same = false;
+      }
+      if (same) continue;
+      allow.fill(0);
+      for (let s = 0; s < list.length; s += n) {
+        let k = 0;
+        while (k < n && (masks[k] & list[s + k])) k++;
+        if (k < n) continue;
+        for (k = 0; k < n; k++) allow[k] |= list[s + k];
+      }
+      for (let k = 0; k < n; k++) {
+        const i = cells[k];
+        if (elim(i, FULL & ~allow[k])) ch = true;
+        last[k] = v[i] ? bitOf(v[i]) : cand[i];
+      }
+    }
+    return ch;
+  };
+}
+
+/* independent check: plain backtracking from countSolutions, with the clue
+   rules as its only extra knowledge. Never touches the logic solver.
+   Read from a clue c, the building t cells in can be at most n - c + 1 + t
+   tall, and a full line must show exactly c. On a partial line the count is
+   bracketed: at least the buildings showing along the filled run from the
+   clue, plus the tallest one if it is not in that run yet; at most one for
+   every cell that could still beat each filled cell in front of it. */
+function countSkyscraperSolutions(spec, puzzle, clues) {
+  const {n} = spec;
+  const lines = skyLines(n, clues);
+  const linesOf = Array.from({length: spec.N}, () => []);
+  for (const l of lines) for (const i of l.cells) linesOf[i].push(l);
+  const sideOk = (v, cells, clue, fromEnd) => {
+    let seen = 0, tallest = 0, run = 0, most = 0, ahead = 0;
+    for (let t = 0; t < n; t++) {
+      const h = v[cells[fromEnd ? n - 1 - t : t]];
+      if (!h) { if (ahead < n) most++; continue; }
+      if (h > n - clue + 1 + t) return false;
+      if (h > ahead) { ahead = h; most++; }
+      if (run === t) {
+        run++;
+        if (h > tallest) { tallest = h; seen++; }
+      }
+    }
+    if (run === n) return seen === clue;
+    const least = seen + (tallest < n ? 1 : 0);
+    return least <= clue && Math.min(most, seen + n - tallest) >= clue;
+  };
+  const ok = (v, i) => {
+    for (const {cells, front, back} of linesOf[i]) {
+      if (front && !sideOk(v, cells, front, false)) return false;
+      if (back && !sideOk(v, cells, back, true)) return false;
+    }
+    return true;
+  };
+  return countSolutions(spec, puzzle, 2, ok);
+}
+
+function skyClues(sol, n) {
+  const clues = {top: [], bottom: [], left: [], right: []};
+  for (let k = 0; k < n; k++) {
+    const row = [], col = [];
+    for (let t = 0; t < n; t++) { row.push(sol[k * n + t]); col.push(sol[t * n + k]); }
+    clues.left.push(skyVisible(row));
+    clues.right.push(skyVisible(row.reverse()));
+    clues.top.push(skyVisible(col));
+    clues.bottom.push(skyVisible(col.reverse()));
+  }
+  return clues;
+}
+
+/* target counts what is left on the page, clues and givens together; hard
+   strips as far as the logic allows. cluesOnly waits for a solution whose
+   full set of clues settles the grid with no givens at all -- at 6 × 6 only
+   about one in fifteen does, but each test takes a fraction of a millisecond. */
+const SKYSCRAPER_CFG = {
+  easy:   {n: 5, tier: 1, target: 16, attempts: 10},
+  medium: {n: 6, tier: 1, target: 14, attempts: 10},
+  hard:   {n: 6, tier: 3, target: 0, attempts: 400, cluesOnly: true}
+};
+
+/* Start from every clue and every given, then remove them one at a time,
+   keeping a removal only while the logic still finishes the grid. Givens go
+   first, in random order, then clues: a given is worth more than a clue, so
+   a single shuffled list ends up keeping givens and dropping clues, and what
+   is left reads as a Latin square with a few edge numbers. */
+function makeSkyscrapers(level) {
+  const cfg = SKYSCRAPER_CFG[level];
+  const spec = buildSpec("latin" + cfg.n);
+  const {n, N} = spec;
+  for (let attempt = 0; attempt < cfg.attempts; attempt++) {
+    const sol = generateSolution(spec);
+    if (!sol) continue;
+    const clues = skyClues(sol, n);
+    const empty = new Uint8Array(N);
+    if (cfg.cluesOnly && !logicSolveUpTo(spec, empty, cfg.tier, makeSkyscraperPropagator(spec, clues))) continue;
+    const puzzle = cfg.cluesOnly ? empty : Uint8Array.from(sol);
+    const givens = [], edge = [];
+    for (let i = 0; i < N; i++) if (puzzle[i]) givens.push(["given", i]);
+    for (const side of SKY_SIDES) for (let k = 0; k < n; k++) edge.push([side, k]);
+    let left = givens.length + edge.length;
+    for (const [what, k] of shuffle(givens).concat(shuffle(edge))) {
+      if (left <= cfg.target) break;
+      const owner = what === "given" ? puzzle : clues[what];
+      const saved = owner[k];
+      owner[k] = what === "given" ? 0 : null;
+      if (!logicSolveUpTo(spec, puzzle, cfg.tier, makeSkyscraperPropagator(spec, clues))) {
+        owner[k] = saved;
+        continue;
+      }
+      left--;
+    }
+    const check = countSkyscraperSolutions(spec, puzzle, clues);
+    if (check.aborted || check.count !== 1) continue;
+    return {spec, solution: sol, puzzle, clues, left};
   }
   return null;
 }
@@ -1660,6 +2153,9 @@ const TYPES = {
   kropki: {name: "Kropki-sudoku", family: "kropki", symmetry: false,
     rules: "Täytä ruudukko luvuilla 1–9 niin, että jokaisella rivillä, sarakkeessa ja 3 × 3 -lohkossa on kukin luku täsmälleen kerran. Musta pallo vierekkäisten ruutujen välissä tarkoittaa, että toinen luvuista on kaksinkertainen toiseen nähden. Valkoinen pallo tarkoittaa, että luvut ovat peräkkäisiä. Jos ruutujen välissä ei ole palloa, kumpikaan ehto ei täyty – myös pallon puuttuminen on siis vihje. Luvut 1 ja 2 täyttävät molemmat ehdot, ja niiden välissä on musta-valkoinen yhdistelmäpallo.",
     cell: {1: "18mm", 2: "11.6mm", 4: "8.8mm", sol: "7.2mm"}},
+  killer: {name: "Killer-sudoku", family: "killer", symmetry: false,
+    rules: "Täytä ruudukko luvuilla 1–9 niin, että jokaisella rivillä, sarakkeessa ja 3 × 3 -lohkossa on kukin luku täsmälleen kerran. Katkoviivalla rajatun alueen lukujen summa on alueen kulmaan merkitty luku, eikä sama luku saa toistua alueen sisällä.",
+    cell: {1: "18mm", 2: "11.6mm", 4: "8.8mm", sol: "7.2mm"}},
   futoshiki: {name: "Futoshiki", family: "futoshiki", symmetry: false,
     rules: "Täytä ruudukko luvuilla 1–n niin, että kullakin rivillä ja sarakkeessa on kukin luku kerran. Ruutujen väliset merkit kertovat, kumpi luku on suurempi.",
     cell: {1: "20mm", 2: "12mm", 4: "9mm", sol: "8mm"}},
@@ -1676,6 +2172,16 @@ const TYPES = {
       easy:   {1: "12.9mm", 2: "8.6mm", 4: "6.4mm", sol: "7mm"},
       medium: {1: "9.7mm",  2: "6.2mm", 4: "4.3mm", sol: "4.8mm"},
       hard:   {1: "7.3mm",  2: "4.8mm", 4: "3.4mm", sol: "3.6mm"}
+    }},
+  skyscrapers: {name: "Pilvenpiirtäjät", family: "skyscrapers", symmetry: false,
+    rules: "Täytä ruudukko niin, että jokaisella rivillä ja sarakkeessa on kukin luku 1:stä ruudukon kokoon asti täsmälleen kerran. Luvut ovat pilvenpiirtäjien korkeuksia. Reunan luku kertoo, montako pilvenpiirtäjää näkyy, kun riviä tai saraketta katsotaan siitä suunnasta: korkeampi rakennus peittää kaikki matalammat takanaan.",
+    cell: {1: "19mm", 2: "12.5mm", 4: "9.5mm", sol: "8mm"},
+    /* the clue strips make the footprint n + 2 cells a side, and n grows
+       from 5 to 6, so each level gets its own sizes */
+    cellByLevel: {
+      easy:   {1: "22mm", 2: "14mm",   4: "10.5mm", sol: "9mm"},
+      medium: {1: "19mm", 2: "12.5mm", 4: "9.5mm",  sol: "8mm"},
+      hard:   {1: "19mm", 2: "12.5mm", 4: "9.5mm",  sol: "8mm"}
     }},
   hitori: {name: "Hitori", family: "hitori", symmetry: false,
     rules: "Väritä ruutuja niin, ettei millään rivillä tai sarakkeessa ole samaa lukua kahdesti värittämättömissä ruuduissa. Värjätyt ruudut eivät saa koskettaa toisiaan sivuistaan, ja värjäämättömien on muodostettava yhtenäinen alue.",
@@ -1806,6 +2312,85 @@ function renderKropki(item, isSolution) {
     svg.appendChild(kropkiDotMark(cx, cy, type));
   }
   g.appendChild(svg);
+  return g;
+}
+
+/* Cage outlines run a little inside the cells, so they never sit on the grid
+   lines. Each cell draws the sides it shares with no cage mate. A side next
+   to a cage mate runs to the cell edge to meet the mate's own side, and at an
+   inner corner it runs on by the inset to meet the outline coming round the
+   corner. Pieces on one line are then joined, so the dashes run on along a
+   straight stretch instead of restarting at every cell. */
+function killerCagePath(cageOf, n, inset) {
+  const runs = {h: new Map(), v: new Map()};
+  const add = (dir, at, a, b) => {
+    const key = at.toFixed(3);
+    if (!runs[dir].has(key)) runs[dir].set(key, []);
+    runs[dir].get(key).push([a, b]);
+  };
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const k = cageOf[y * n + x];
+      const same = (dr, dc) => {
+        const r = y + dr, c = x + dc;
+        return r >= 0 && r < n && c >= 0 && c < n && cageOf[r * n + c] === k;
+      };
+      const i = inset;
+      for (const dr of [-1, 1]) {
+        if (same(dr, 0)) continue;
+        add("h", dr < 0 ? y + i : y + 1 - i,
+          same(0, -1) ? (same(dr, -1) ? x - i : x) : x + i,
+          same(0, 1) ? (same(dr, 1) ? x + 1 + i : x + 1) : x + 1 - i);
+      }
+      for (const dc of [-1, 1]) {
+        if (same(0, dc)) continue;
+        add("v", dc < 0 ? x + i : x + 1 - i,
+          same(-1, 0) ? (same(-1, dc) ? y - i : y) : y + i,
+          same(1, 0) ? (same(1, dc) ? y + 1 + i : y + 1) : y + 1 - i);
+      }
+    }
+  }
+  const d = [];
+  const f = z => +z.toFixed(3);
+  for (const dir of ["h", "v"]) {
+    for (const [key, segs] of runs[dir]) {
+      segs.sort((p, q) => p[0] - q[0]);
+      let [a, b] = segs[0];
+      const flush = () => d.push(dir === "h" ? `M${f(a)} ${key}H${f(b)}` : `M${key} ${f(a)}V${f(b)}`);
+      for (const [c, e] of segs.slice(1)) {
+        if (c <= b + 1e-6) { b = Math.max(b, e); continue; }
+        flush();
+        [a, b] = [c, e];
+      }
+      flush();
+    }
+  }
+  return d.join("");
+}
+
+function renderKiller(item, isSolution) {
+  const g = renderSudoku(item, isSolution);
+  g.classList.add("killer");
+  g.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Killer-sudoku-tehtävä");
+  const n = item.spec.n;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "kcages");
+  svg.setAttribute("viewBox", `0 0 ${n} ${n}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", killerCagePath(item.cageOf, n, 0.08));
+  svg.appendChild(path);
+  g.appendChild(svg);
+
+  /* the sum sits in the cage's first cell in reading order, which is always
+     an outer top-left corner of the outline; its white backing breaks the
+     dashes around it */
+  for (const {cells, sum} of item.cages) {
+    const s = document.createElement("span");
+    s.className = "ksum";
+    s.textContent = String(sum);
+    g.children[cells[0]].appendChild(s);
+  }
   return g;
 }
 
@@ -1964,7 +2549,44 @@ function renderNonogram(item, isSolution) {
   return wrap;
 }
 
-const RENDER = {sudoku: renderSudoku, kropki: renderKropki, futoshiki: renderFutoshiki, kakuro: renderKakuro, hitori: renderHitori, nonogram: renderNonogram};
+/* Laid out like the nonogram: the play grid in the middle, a strip of clue
+   cells on each side, and empty corners. The solution keeps the clues, so the
+   answer can be checked against them. */
+function renderSkyscrapers(item, isSolution) {
+  const n = item.spec.n;
+  const values = isSolution ? item.solution : item.puzzle;
+  const play = document.createElement("div");
+  play.className = "grid" + (isSolution ? " solution" : "");
+  play.style.gridTemplateColumns = `repeat(${n}, var(--cell))`;
+  for (let i = 0; i < n * n; i++) play.appendChild(cellEl(values[i] ? String(values[i]) : ""));
+  play.appendChild(gridLines(n, () => false));
+
+  const strip = (dir, nums) => {
+    const d = document.createElement("div");
+    d.className = "sky-strip " + dir;
+    for (const v of nums) {
+      const c = document.createElement("div");
+      c.className = "clue";
+      if (v) c.textContent = String(v);
+      d.appendChild(c);
+    }
+    return d;
+  };
+  const corner = () => document.createElement("div");
+
+  const wrap = document.createElement("div");
+  wrap.className = "sky";
+  wrap.setAttribute("role", "img");
+  wrap.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Pilvenpiirtäjät-tehtävä");
+  const {top, bottom, left, right} = item.clues;
+  wrap.append(corner(), strip("h", top), corner(),
+              strip("v", left), play, strip("v", right),
+              corner(), strip("h", bottom), corner());
+  return wrap;
+}
+
+const RENDER = {sudoku: renderSudoku, kropki: renderKropki, killer: renderKiller, futoshiki: renderFutoshiki,
+  kakuro: renderKakuro, hitori: renderHitori, nonogram: renderNonogram, skyscrapers: renderSkyscrapers};
 
 /* ============================================================
    Puzzle creation
@@ -1979,6 +2601,14 @@ function buildOne(type, level, symmetric) {
   if (fam === "kropki") {
     const r = makeKropki(level);
     return r ? {kind: fam, spec: r.spec, puz: r.puz, solution: r.solution, dots: r.dots} : null;
+  }
+  if (fam === "killer") {
+    const r = makeKiller(level);
+    return r ? {kind: fam, spec: r.spec, puz: r.puz, solution: r.solution, cages: r.cages, cageOf: r.cageOf} : null;
+  }
+  if (fam === "skyscrapers") {
+    const r = makeSkyscrapers(level);
+    return r ? {kind: fam, spec: r.spec, puzzle: r.puzzle, solution: r.solution, clues: r.clues} : null;
   }
   if (fam === "futoshiki") {
     const r = makeFutoshiki(level);

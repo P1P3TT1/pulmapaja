@@ -246,10 +246,10 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 
 /* board panel left, info column right on wide screens; stacked below.
    --cell fits the board to the space the layout leaves it. */
-.play{--span:9;--d:9;--cell:clamp(28px,calc((100vw - 96px) / var(--span)),54px);--gap:calc(var(--cell) * 0.42);
+.play{--span:9;--d:9;--cell-min:28px;--cell:clamp(var(--cell-min),calc((100vw - 96px) / var(--span)),54px);--gap:calc(var(--cell) * 0.42);
   display:grid;grid-template-columns:minmax(0,1fr);gap:24px;justify-items:center;align-items:start;min-width:0}
-@media (min-width:1151px){.play{--cell:clamp(28px,calc((100vw - 490px) / var(--span)),54px)}}
-@media (min-width:1400px){.play{--cell:clamp(28px,calc((100vw - 870px) / var(--span)),54px);
+@media (min-width:1151px){.play{--cell:clamp(var(--cell-min),calc((100vw - 490px) / var(--span)),54px)}}
+@media (min-width:1400px){.play{--cell:clamp(var(--cell-min),calc((100vw - 870px) / var(--span)),54px);
   grid-template-columns:auto minmax(0,340px);justify-content:center;justify-items:stretch}}
 
 .play-panel,.play-info{background:var(--paper);border:1px solid var(--hair)}
@@ -294,12 +294,35 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .play-board .kgrid .cell .diag line{stroke:var(--ink-soft)}
 .play-board .kgrid .cell :is(.across,.down){color:var(--ink)}
 
+.play-board .hgrid{border:3px solid var(--grid-thick);background:var(--board)}
+.play-board .hgrid .cell{position:relative;border-color:var(--grid-thin);color:var(--ink);font-size:calc(var(--cell)*.5);
+  cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .08s}
+.play-board .ngram .clue{color:var(--ink)}
+.play-board .ngram-cols{padding-left:3px}
+.play-board .ngram-rows{padding-top:3px}
+.play-board .ngram .clue span{cursor:pointer;border-radius:2px}
+.play-board .ngram .clue span.done{color:var(--ink-soft);text-decoration:line-through;opacity:.55}
+/* a 20 × 20 or a picture nonogram gets smaller cells, and on a phone it
+   scrolls inside the panel rather than widening the page */
+.play.ctl-nonogram{--cell-min:14px}
+.play.ctl-nonogram .play-panel{max-width:100%;min-width:0}
+.play.ctl-nonogram .play-col{max-width:100%}
+.play.ctl-nonogram .play-board{max-width:100%;overflow:auto;padding:2px}
+.play.ctl-nonogram .play-board .grid{touch-action:none}
+.play.ctl-nonogram .play-board .grid .cell{font-size:calc(var(--cell)*.7);color:var(--ink-soft)}
+
 .play-board .cell.given{font-weight:600}
 .play-board .cell.user{font-weight:500;color:var(--blue)}
 .play-board .cell.peer{background:var(--peer)}
 .play-board .cell.same{background:var(--same)}
 .play-board .cell.sel{background:var(--selbg)}
 .play-board .cell.clash{color:var(--red)}
+/* shading marks come after the highlights, so a filled cell stays filled
+   when its row is highlighted; the selection then shows as a ring */
+.play-board .cell.mk-fill,.play-board .cell.mk-shade{background:var(--ink)}
+.play-board .cell.mk-shade{color:var(--ink-soft)}
+.play-board .cell.mk-circle::after{content:"";position:absolute;inset:10%;border:2px solid var(--blue);border-radius:50%;pointer-events:none}
+.play.ctl-shading .play-board .cell.sel{box-shadow:inset 0 0 0 3px var(--blue)}
 .play-board .cell .v{display:contents}
 .play-board .notes{display:grid;grid-auto-rows:1fr;width:100%;height:100%;padding:2px;
   font-size:calc(var(--cell)*.22);font-weight:500;color:var(--ink-soft)}
@@ -324,7 +347,8 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
   font-family:var(--display);font-size:13px;font-weight:500;padding:9px 2px}
 .tools button:hover{background:var(--blue-soft)}
 .tools button[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);color:var(--on-accent)}
-.play.is-done :is(.pad,.tools){opacity:.45;pointer-events:none}
+.play.is-done :is(.pad,.modes,.tools){opacity:.45;pointer-events:none}
+.play.no-puzzle .modes{display:none}
 .play-status{margin:0;min-height:1.3em;font-family:var(--mono);font-size:11.5px;color:var(--blue)}
 .keys{margin:2px 0 0;font-size:11.5px;line-height:1.55;color:var(--ink-soft)}
 .keys kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--hair);padding:0 4px;background:var(--board)}
@@ -364,7 +388,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 
 @media screen and (max-width:600px){
   body.playing .app{padding:16px}
-  .play{--cell:clamp(26px,calc((100vw - 64px) / var(--span)),54px)}
+  .play{--cell-min:26px;--cell:clamp(var(--cell-min),calc((100vw - 64px) / var(--span)),54px)}
   .play-panel{padding:14px 12px}
   .play-info{padding:18px 16px}
   .tools button{font-size:12px}

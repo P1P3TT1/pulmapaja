@@ -92,12 +92,14 @@ function jigsawRegions() {
 
 /* ---------- spec building ---------- */
 
-function buildSpec(kind) {
+/* A jigsaw normally draws fresh regions; a decoded puzzle passes the regions
+   it was made with instead. */
+function buildSpec(kind, givenRegions) {
   let n, regionOf = null, diagonals = false, regionMap = null;
   if (kind === "sudoku9")  { n = 9; regionOf = i => Math.floor(i / 27) * 3 + Math.floor((i % 9) / 3); }
   if (kind === "sudoku6")  { n = 6; regionOf = i => Math.floor(i / 12) * 2 + Math.floor((i % 6) / 3); }
   if (kind === "diagonal") { n = 9; regionOf = i => Math.floor(i / 27) * 3 + Math.floor((i % 9) / 3); diagonals = true; }
-  if (kind === "jigsaw")   { n = 9; regionMap = jigsawRegions(); regionOf = i => regionMap[i]; }
+  if (kind === "jigsaw")   { n = 9; regionMap = givenRegions || jigsawRegions(); regionOf = i => regionMap[i]; }
   /* plain Latin squares, rows and columns only: "latin4" … "latin9".
      Futoshiki keeps its own names for the 5 × 5 and 6 × 6 squares. */
   if (kind === "futoshiki"){ n = 5; }

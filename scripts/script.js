@@ -69,6 +69,12 @@ const TYPES = {
 
 const LEVEL_LABEL = {easy: "helppo", medium: "keskitaso", hard: "vaikea"};
 
+/* Where Ratkaise ruudulla is hosted, for example
+   "https://example.github.io/pulmapaja/". When set, every printed puzzle
+   gets a small QR code that opens it on screen at PLAY_BASE_URL + "#" + its
+   code. Empty, the sheets print exactly as without the feature. */
+const PLAY_BASE_URL = "";
+
 /* ============================================================
    Rendering
    ============================================================ */
@@ -724,6 +730,10 @@ function buildSheet(title, level, layout, items, pageNo, pageTotal, isSolution, 
     h.textContent = (isSolution ? "Ratkaisu " : "Nro ") + item.number;
     art.appendChild(h);
     art.appendChild(RENDER[item.data.kind](item.data, isSolution));
+    if (PLAY_BASE_URL && !isSolution) {
+      art.classList.add("has-qr");
+      art.appendChild(puzzleQr(type, level, item.data));
+    }
     body.appendChild(art);
   }
   sheet.appendChild(body);
@@ -735,6 +745,28 @@ function buildSheet(title, level, layout, items, pageNo, pageTotal, isSolution, 
   foot.children[1].textContent = pageNo + "/" + pageTotal;
   sheet.appendChild(foot);
   return sheet;
+}
+
+/* A QR code linking to the puzzle in Ratkaise ruudulla, drawn as one SVG
+   path so it prints sharp at any size. Error correction L keeps the
+   modules as large as the 14 mm allows; the code holds the puzzle only,
+   never progress. A picture nonogram passes its grid size as the level. */
+function puzzleQr(type, level, data) {
+  const url = PLAY_BASE_URL + "#" + encodeCode(type, LEVEL_LABEL[level] ? level : "none", data, null).code;
+  const qr = qrcode(0, "L");
+  qr.addData(url, "Byte");
+  qr.make();
+  const n = qr.getModuleCount(), q = 2, d = [];
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d.push(`M${c + q} ${r + q}h1v1h-1z`);
+  const a = document.createElement("a");
+  a.className = "qr";
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.setAttribute("aria-label", "Ratkaise ruudulla");
+  a.innerHTML = `<svg viewBox="0 0 ${n + 2 * q} ${n + 2 * q}" shape-rendering="crispEdges" aria-hidden="true">` +
+    `<rect width="100%" height="100%" fill="#fff"/><path d="${d.join("")}" fill="#000"/></svg>`;
+  return a;
 }
 
 function chunk(arr, size) {

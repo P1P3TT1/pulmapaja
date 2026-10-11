@@ -125,6 +125,15 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .puzzle{display:flex;flex-direction:column;align-items:center;gap:2.5mm}
 .puzzle h3{margin:0;align-self:flex-start;font-family:var(--mono);font-size:9pt;font-weight:600;letter-spacing:0.1em;text-transform:uppercase}
 
+/* QR code to Ratkaise ruudulla at the puzzle's bottom right (only when
+   PLAY_BASE_URL is set in script.js). Under the grid where the page has
+   height to spare; two to a page have none, but have room at the sides, so
+   there it sits beside the grid's corner and takes no height at all. */
+.puzzle.has-qr{position:relative}
+.puzzle .qr{display:block;align-self:flex-end;width:14mm;height:14mm;margin-top:-1mm}
+.sheet-body[data-cols="1"][data-rows="2"] .puzzle .qr{position:absolute;left:calc(100% + 3mm);bottom:0;margin:0}
+.puzzle .qr svg{display:block;width:100%;height:100%}
+
 /* ---- grids ---- */
 .grid{display:grid;border:0.9mm solid #000;position:relative}
 .grid .cell{

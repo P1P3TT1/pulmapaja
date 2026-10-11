@@ -23,6 +23,10 @@ const CODE_TYPE_IDS = {sudoku9: 1, sudoku6: 2, diagonal: 3, jigsaw: 4, kropki: 5
 const CODE_ID_TYPES = Object.fromEntries(Object.entries(CODE_TYPE_IDS).map(([t, id]) => [id, t]));
 /* "none" is a nonogram built from a picture, which has no difficulty level */
 const CODE_LEVELS = ["easy", "medium", "hard", "none"];
+/* No code is shorter: the smallest is an easy hashi (7 × 7 grid, at least 10
+   islands, so at least 9 edges) at 12 bytes. A link's hash is taken for a
+   code from this length on; tests/run.js checks every generated code. */
+const CODE_MIN_LENGTH = 16;
 
 const CODE_MSG = {
   empty: "Liitä ensin koodi.",

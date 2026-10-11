@@ -195,6 +195,7 @@ function checkTamper(code) {
 
 function roundTrip(type, level, gen) {
   const a = G.encodeCode(type, level, gen, null);
+  assert(a.code.length >= G.CODE_MIN_LENGTH, `code is ${a.code.length} characters, below CODE_MIN_LENGTH`);
   const da = G.decodeCode(a.code);
   assert(da.type === type && da.level === level && da.progress === null, "type, level or progress flag");
   sameItem(type, gen, da);

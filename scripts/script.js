@@ -524,7 +524,9 @@ const RENDER = {sudoku: renderSudoku, kropki: renderKropki, killer: renderKiller
    ============================================================ */
 
 const el = id => document.getElementById(id);
-const state = {type: "sudoku9", source: "random", level: "easy", layout: 2, count: 4};
+/* mode is "print" (sheets to print) or "play" (one puzzle solved on screen,
+   see play.js) */
+const state = {mode: "print", type: "sudoku9", source: "random", level: "easy", layout: 2, count: 4};
 
 function bindSegment(id, key, cast, onChange) {
   el(id).addEventListener("click", e => {
@@ -538,6 +540,10 @@ function bindSegment(id, key, cast, onChange) {
 bindSegment("seg-level", "level", v => v);
 bindSegment("seg-layout", "layout", v => parseInt(v, 10));
 bindSegment("seg-source", "source", v => v, syncMode);
+bindSegment("seg-mode", "mode", v => v, () => {
+  syncMode();
+  if (window.Play) window.Play.modeChanged();
+});
 
 /* Own picture. `gray` is the cropped image averaged down to the chosen grid;
    the threshold is in luminance, so it survives a change of grid size. */
@@ -555,11 +561,21 @@ function syncMode() {
   const nonogram = state.type === "nonogram";
   if (!nonogram) state.source = "random";
   const pic = pictureMode();
+  const play = state.mode === "play";
   el("src-wrap").hidden = !nonogram;
   el("img-wrap").hidden = !pic;
-  for (const id of ["field-level", "field-count", "field-layout"]) el(id).hidden = pic;
+  el("field-level").hidden = pic;
+  /* play mode solves one puzzle on screen, so everything about sheets goes */
+  for (const id of ["field-count", "field-layout"]) el(id).hidden = pic || play;
+  for (const id of ["field-title", "sol-wrap", "print", "pdf-hint"]) el(id).hidden = play;
+  el("preview").hidden = play;
+  el("play").hidden = !play;
+  document.body.classList.toggle("playing", play);
+  el("generate").textContent = play ? "Luo tehtävä" : "Luo tehtävät";
   el("seg-source").querySelectorAll("button").forEach(b =>
     b.setAttribute("aria-pressed", String(b.dataset.value === state.source)));
+  el("seg-mode").querySelectorAll("button").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.value === state.mode)));
 }
 
 function drawPicturePreview() {
@@ -656,6 +672,7 @@ function syncType() {
   wrap.classList.toggle("off", !t.symmetry);
   syncMode();
   refreshPicture(false);
+  if (window.Play) window.Play.typeChanged();
 }
 el("type").addEventListener("change", syncType);
 syncType();
@@ -733,6 +750,7 @@ const printBtn = el("print");
 const idle = () => new Promise(r => setTimeout(r, 0));
 
 async function generate() {
+  if (state.mode === "play") { window.Play.create(); return; }
   const fromPicture = pictureMode();
   if (fromPicture && !picture.img) {
     statusEl.textContent = "Valitse ensin kuva.";

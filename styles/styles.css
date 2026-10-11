@@ -7,6 +7,20 @@
   --line:#9BA8B0;
   --blue:#1E5FA8;
   --blue-soft:#DEE8F5;
+  /* play mode; light values equal the literals the print UI always used */
+  --board:#FFFFFF;
+  --on-accent:#FFFFFF;
+  --hair:#CDD5D8;
+  --rule-soft:#E0E5E7;
+  --peer:#F1F5FA;
+  --same:#D3E2F4;
+  --selbg:#BFD5EE;
+  --red:#B3261E;
+  --red-soft:#F8DEDA;
+  --green:#2E7D4F;
+  --green-soft:#DCEFE3;
+  --grid-thin:#9AA3A8;
+  --grid-thick:#16202B;
   --display:"Space Grotesk","Segoe UI",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,"Consolas",monospace;
 }
@@ -25,7 +39,7 @@ body{
 }
 .app{display:grid;grid-template-columns:340px minmax(0,1fr);gap:32px;align-items:start;padding:32px;max-width:1500px;margin:0 auto}
 
-.rail{position:sticky;top:32px;background:var(--paper);border:1px solid #CDD5D8;border-left:4px solid var(--blue);padding:28px 26px 26px}
+.rail{position:sticky;top:32px;background:var(--paper);border:1px solid var(--hair);border-left:4px solid var(--blue);padding:28px 26px 26px}
 .brand{display:flex;align-items:baseline;gap:10px;margin:0 0 6px;font-size:27px;font-weight:700;letter-spacing:-0.02em}
 .brand .mark{display:inline-grid;grid-template-columns:repeat(3,6px);grid-template-rows:repeat(3,6px);gap:1px;flex:none;align-self:center}
 .brand .mark i{background:var(--blue-soft)}
@@ -34,15 +48,15 @@ body{
 .field{margin-bottom:22px}
 .field>label,.field>.label{display:block;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:9px}
 
-select{width:100%;font-family:var(--display);font-size:15px;color:var(--ink);background:#fff;border:1px solid var(--line);padding:10px 11px}
+select{width:100%;font-family:var(--display);font-size:15px;color:var(--ink);background:var(--board);border:1px solid var(--line);padding:10px 11px}
 .seg{display:flex;border:1px solid var(--line)}
 .seg button{flex:1;appearance:none;border:0;border-right:1px solid var(--line);background:transparent;font-family:var(--display);font-size:14px;font-weight:500;color:var(--ink);padding:10px 4px;cursor:pointer;transition:background .12s,color .12s}
 .seg button:last-child{border-right:0}
 .seg button:hover{background:var(--blue-soft)}
-.seg button[aria-pressed="true"]{background:var(--blue);color:#fff}
-input[type="text"],input[type="number"]{width:100%;font-family:var(--display);font-size:15px;color:var(--ink);background:#fff;border:1px solid var(--line);padding:9px 11px}
+.seg button[aria-pressed="true"]{background:var(--blue);color:var(--on-accent)}
+input[type="text"],input[type="number"]{width:100%;font-family:var(--display);font-size:15px;color:var(--ink);background:var(--board);border:1px solid var(--line);padding:9px 11px}
 input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.stepper{display:flex;align-items:stretch;border:1px solid var(--line);background:#fff}
+.stepper{display:flex;align-items:stretch;border:1px solid var(--line);background:var(--board)}
 .stepper button{width:42px;border:0;background:transparent;font-family:var(--mono);font-size:18px;color:var(--ink);cursor:pointer}
 .stepper button:hover{background:var(--blue-soft)}
 .stepper input{border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);text-align:center;font-family:var(--mono);font-size:16px;-moz-appearance:textfield}
@@ -51,14 +65,14 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .check input{width:17px;height:17px;accent-color:var(--blue);margin:0;flex:none}
 .check.off{opacity:.4;cursor:default}
 .actions{margin-top:28px;display:flex;flex-direction:column;gap:10px}
-.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:#fff;font-family:var(--display);font-size:15px;font-weight:500;padding:13px;cursor:pointer;transition:opacity .12s}
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--on-accent);font-family:var(--display);font-size:15px;font-weight:500;padding:13px;cursor:pointer;transition:opacity .12s}
 .btn:hover{opacity:.86}
 .btn[disabled]{opacity:.4;cursor:default}
 .btn.ghost{background:transparent;color:var(--ink)}
-.btn.ghost:hover{background:#fff}
+.btn.ghost:hover{background:var(--board)}
 .hint{margin:14px 0 0;font-size:12px;line-height:1.5;color:var(--ink-soft)}
 .status{margin-top:16px;font-family:var(--mono);font-size:11.5px;color:var(--blue);min-height:1.2em}
-.rules{margin:10px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-soft);border-top:1px solid #E0E5E7;padding-top:14px}
+.rules{margin:10px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-soft);border-top:1px solid var(--rule-soft);padding-top:14px}
 
 /* own-image panel */
 .field-head{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
@@ -67,7 +81,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
   text-transform:uppercase;color:var(--blue);background:var(--blue-soft);
   padding:2px 5px;border-radius:2px;flex:none}
 .seg button .beta{margin-left:5px;padding:1px 4px;font-size:8.5px}
-.seg button[aria-pressed="true"] .beta{background:rgba(255,255,255,.24);color:#fff}
+.seg button[aria-pressed="true"] .beta{background:rgba(255,255,255,.24);color:var(--on-accent)}
 /* also carries .note, which is defined below, so it needs the extra class
    to win on colour */
 .note.img-result{margin:10px 0 0;font-size:12px;color:var(--blue)}
@@ -75,10 +89,10 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .note{margin:0 0 9px;font-size:12px;line-height:1.45;color:var(--ink-soft)}
 #img-file{width:100%;font-family:var(--display);font-size:12.5px;color:var(--ink-soft)}
 #img-file::file-selector-button{font-family:var(--display);font-size:13px;color:var(--ink);
-  background:#fff;border:1px solid var(--line);padding:7px 11px;margin-right:10px;cursor:pointer}
+  background:var(--board);border:1px solid var(--line);padding:7px 11px;margin-right:10px;cursor:pointer}
 #img-file::file-selector-button:hover{background:var(--blue-soft)}
 .img-panel{display:flex;gap:12px;margin-top:12px}
-.img-panel canvas{width:96px;height:96px;flex:none;border:1px solid var(--line);background:#fff;
+.img-panel canvas{width:96px;height:96px;flex:none;border:1px solid var(--line);background:var(--board);
   image-rendering:pixelated}
 .img-opts{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
 .img-opts .label,.img-opts label{margin:0}
@@ -196,6 +210,134 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .hashi .hisland{fill:#fff;stroke:#000;stroke-width:0.3mm;vector-effect:non-scaling-stroke}
 .hashi text{font-family:var(--mono);font-weight:500;font-size:0.5px;fill:#000;
   text-anchor:middle;dominant-baseline:central}
+
+/* ============================================================
+   Ratkaise ruudulla (play mode). The board is the print renderer's own grid,
+   restyled for the screen; everything here is scoped to .play or to
+   body.playing, so print mode looks exactly as before.
+   ============================================================ */
+
+/* dark theme, play mode only: printed sheets stay paper white */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body.playing{
+  --desk:#10161C; --rule-faint:#18212A; --paper:#19212A; --board:#1E2730; --on-accent:#1E2730;
+  --ink:#E4EAEE; --ink-soft:#93A1AB; --line:#46535E; --hair:#2C3742; --rule-soft:#2C3742;
+  --blue:#78A9E3; --blue-soft:#22364E; --peer:#222D38; --same:#2C4460; --selbg:#36547A;
+  --red:#F08A80; --red-soft:#4A2522; --green:#7CCB9A; --green-soft:#1E3A2A;
+  --grid-thin:#4E5B66; --grid-thick:#C9D3DA;
+  color-scheme:dark}}
+:root[data-theme="dark"] body.playing{
+  --desk:#10161C; --rule-faint:#18212A; --paper:#19212A; --board:#1E2730; --on-accent:#1E2730;
+  --ink:#E4EAEE; --ink-soft:#93A1AB; --line:#46535E; --hair:#2C3742; --rule-soft:#2C3742;
+  --blue:#78A9E3; --blue-soft:#22364E; --peer:#222D38; --same:#2C4460; --selbg:#36547A;
+  --red:#F08A80; --red-soft:#4A2522; --green:#7CCB9A; --green-soft:#1E3A2A;
+  --grid-thin:#4E5B66; --grid-thick:#C9D3DA;
+  color-scheme:dark}
+
+.check[hidden],.play [hidden],.play[hidden]{display:none!important}
+
+/* board panel left, info column right on wide screens; stacked below.
+   --cell fits the board to the space the layout leaves it. */
+.play{--n:9;--cell:clamp(28px,calc((100vw - 96px) / var(--n)),54px);
+  display:grid;grid-template-columns:minmax(0,1fr);gap:24px;justify-items:center;align-items:start;min-width:0}
+@media (min-width:1151px){.play{--cell:clamp(28px,calc((100vw - 490px) / var(--n)),54px)}}
+@media (min-width:1400px){.play{--cell:clamp(28px,calc((100vw - 870px) / var(--n)),54px);
+  grid-template-columns:auto minmax(0,340px);justify-content:center;justify-items:stretch}}
+
+.play-panel,.play-info{background:var(--paper);border:1px solid var(--hair)}
+.play-panel{padding:22px 22px 18px}
+.play-col{width:calc(var(--cell) * var(--n) + 6px);display:flex;flex-direction:column;gap:14px}
+.play-head{display:flex;align-items:baseline;gap:10px}
+.play-head h2{margin:0;font-size:19px;font-weight:700;letter-spacing:-.015em}
+.play-head .tag{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+.play-head .clock{margin-left:auto;font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums;color:var(--ink-soft)}
+.play-empty{display:none;background:var(--board);border:1px dashed var(--line);padding:60px 24px;text-align:center;color:var(--ink-soft);font-size:14.5px}
+.play.no-puzzle .play-empty{display:block}
+.play.no-puzzle :is(.play-head .tag,.play-head .clock,.play-board,.pad,.tools,.keys){display:none}
+
+/* the board */
+.play-board{outline:none;align-self:flex-start}
+.play-board:focus-visible .grid{box-shadow:0 0 0 3px var(--blue-soft),0 0 0 5px var(--blue)}
+.play-board .grid{border:3px solid var(--grid-thick);background:var(--board)}
+.play-board .grid .cell{color:var(--ink);font-size:calc(var(--cell)*.56);font-weight:400;cursor:pointer;
+  user-select:none;-webkit-user-select:none;font-variant-numeric:tabular-nums;transition:background .08s}
+.play-board .grid .glines .thin{stroke:var(--grid-thin);stroke-width:1px}
+.play-board .grid .glines .thick{stroke:var(--grid-thick);stroke-width:2.5px}
+.play-board .cell.given{font-weight:600}
+.play-board .cell.user{font-weight:500;color:var(--blue)}
+.play-board .cell.peer{background:var(--peer)}
+.play-board .cell.same{background:var(--same)}
+.play-board .cell.sel{background:var(--selbg)}
+.play-board .cell.clash{color:var(--red)}
+.play-board .cell .v{display:contents}
+.play-board .notes{display:grid;grid-auto-rows:1fr;width:100%;height:100%;padding:2px;
+  font-size:calc(var(--cell)*.22);font-weight:500;color:var(--ink-soft)}
+.play-board .notes span{display:flex;align-items:center;justify-content:center}
+.play-board .notes span.hit{color:var(--blue);font-weight:700}
+.play.is-done .play-board .grid .cell{cursor:default}
+
+.done-banner{background:var(--green-soft);color:var(--green);font-weight:500;font-size:14px;padding:10px 12px;text-align:center}
+
+/* number pad and tools */
+.pad{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:4px}
+.pad button{appearance:none;border:1px solid var(--line);background:var(--board);color:var(--ink);cursor:pointer;
+  height:calc(var(--cell)*1.1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:0;
+  font-family:var(--mono);font-size:calc(var(--cell)*.48);font-weight:500;line-height:1}
+.pad button small{font-size:10px;font-weight:400;color:var(--ink-soft);min-height:1em}
+.pad button:hover{background:var(--blue-soft)}
+.pad button.used{opacity:.35}
+.pad.notes-on button{font-size:calc(var(--cell)*.32);color:var(--blue);background:var(--peer)}
+.pad.notes-on button.on{background:var(--same)}
+.tools{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.tools button{appearance:none;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;
+  font-family:var(--display);font-size:13px;font-weight:500;padding:9px 2px}
+.tools button:hover{background:var(--blue-soft)}
+.tools button[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);color:var(--on-accent)}
+.play.is-done :is(.pad,.tools){opacity:.45;pointer-events:none}
+.play-status{margin:0;min-height:1.3em;font-family:var(--mono);font-size:11.5px;color:var(--blue)}
+.keys{margin:2px 0 0;font-size:11.5px;line-height:1.55;color:var(--ink-soft)}
+.keys kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--hair);padding:0 4px;background:var(--board)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* info column */
+.play-info{padding:22px 22px 20px;display:flex;flex-direction:column;gap:24px;width:100%;max-width:560px;min-width:0}
+.play-info .sec{display:flex;flex-direction:column;gap:9px;min-width:0}
+.play-info .label{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
+.play-info .note{margin:0;font-size:12.5px;line-height:1.5}
+.play-info .btn.small{padding:6px 10px;font-size:12.5px}
+.play-info .btn.ghost{border-color:var(--line)}
+.play-info .btn.ghost:hover{background:var(--blue-soft)}
+.code{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--hair);padding-top:10px}
+.code:first-of-type{border-top:0;padding-top:0}
+.code-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.code-head strong{font-size:13.5px;font-weight:600}
+.code-head span{font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.play-info textarea{width:100%;resize:vertical;font-family:var(--mono);font-size:11.5px;line-height:1.45;color:var(--ink);
+  background:var(--board);border:1px solid var(--line);padding:7px 8px;word-break:break-all}
+.play-info textarea[readonly]{color:var(--ink-soft)}
+.play-info textarea:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.play-info .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.play-info .err{margin:0;font-size:12.5px;color:var(--red)}
+.play-info .err:empty{display:none}
+.saved{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.saved li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.saved li:first-child{border-top:0}
+.saved li.empty-list{display:block;border:0;padding:0;font-size:12.5px;color:var(--ink-soft)}
+.saved .what{font-size:13.5px;font-weight:500}
+.saved .what em{font-style:normal;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--green);margin-left:6px}
+.saved .what em.cur{color:var(--blue)}
+.saved .meta{font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.saved .bar{grid-column:1;height:3px;background:var(--hair)}
+.saved .bar i{display:block;height:100%;background:var(--blue)}
+.saved .acts{grid-column:2;grid-row:1 / span 3;display:flex;gap:4px}
+
+@media screen and (max-width:600px){
+  body.playing .app{padding:16px}
+  .play{--cell:clamp(26px,calc((100vw - 64px) / var(--n)),54px)}
+  .play-panel{padding:14px 12px}
+  .play-info{padding:18px 16px}
+  .tools button{font-size:12px}
+}
+@media print{.play{display:none!important}}
 
 @media screen and (max-width:1150px){.app{grid-template-columns:1fr;padding:20px}.rail{position:static}}
 @media screen and (max-width:860px){.sheet{zoom:.62}}

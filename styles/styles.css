@@ -187,6 +187,16 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .hgrid .cell.edge-b{border-bottom:0}
 .hgrid .cell.shaded{background:#2A2A2A;color:#2A2A2A}
 
+/* sillat. Island outlines and bridges are solid lines, so a non-scaling
+   stroke in mm keeps them the same weight at every cell size, as gridLines
+   does; the guide dots are filled shapes and scale with the cell. */
+.hashi{display:block;overflow:visible}
+.hashi .hdots{fill:#B0B0B0;stroke:none}
+.hashi .hbridges{fill:none;stroke:#000;stroke-width:0.35mm;stroke-linecap:butt;vector-effect:non-scaling-stroke}
+.hashi .hisland{fill:#fff;stroke:#000;stroke-width:0.3mm;vector-effect:non-scaling-stroke}
+.hashi text{font-family:var(--mono);font-weight:500;font-size:0.5px;fill:#000;
+  text-anchor:middle;dominant-baseline:central}
+
 @media screen and (max-width:1150px){.app{grid-template-columns:1fr;padding:20px}.rail{position:static}}
 @media screen and (max-width:860px){.sheet{zoom:.62}}
 @media screen and (max-width:600px){.app{padding:14px;gap:20px}.sheet{zoom:.42}}

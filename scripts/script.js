@@ -2133,6 +2133,389 @@ async function makeNonogramFromImage(gray, size, threshold, invert, onStep) {
   return null;
 }
 
+/* ---------- sillat ---------- */
+
+/* The puzzle state lives on the edges between islands rather than on cells,
+   and one rule (everything joined up) is global, so it has its own
+   generator, logic solver and independent counter, like Kakuro and Hitori. */
+
+const HS_EMPTY = 0, HS_ISLAND = 1, HS_BRIDGE_H = 2, HS_BRIDGE_V = 3;
+
+/* Candidate edges come from the island layout alone, never from the
+   generated bridges: every pair that sees each other along a row or a column
+   with nothing but empty cells between. Islands are numbered in reading
+   order and each one looks right and down, so a < b on every edge. */
+function hashiEdges(islands, n) {
+  const at = new Int16Array(n * n).fill(-1);
+  islands.forEach((p, i) => { at[p.r * n + p.c] = i; });
+  const edges = [];
+  islands.forEach((p, a) => {
+    for (const [dr, dc, dir] of [[0, 1, "h"], [1, 0, "v"]]) {
+      const cells = [];
+      let r = p.r + dr, c = p.c + dc;
+      while (r < n && c < n && at[r * n + c] === -1) { cells.push(r * n + c); r += dr; c += dc; }
+      if (r < n && c < n) edges.push({a, b: at[r * n + c], dir, cells});
+    }
+  });
+  return edges;
+}
+
+/* An "h" edge and a "v" edge cross when they pass over a common cell. */
+function hashiCrossings(edges, n) {
+  const hAt = Array.from({length: n * n}, () => []);
+  edges.forEach((e, k) => { if (e.dir === "h") for (const i of e.cells) hAt[i].push(k); });
+  const cross = edges.map(() => []);
+  edges.forEach((e, k) => {
+    if (e.dir !== "v") return;
+    for (const i of e.cells) for (const h of hAt[i]) { cross[k].push(h); cross[h].push(k); }
+  });
+  return cross;
+}
+
+/* ---------- logic solver ---------- */
+
+/* Every edge keeps the fewest (lo) and most (hi) bridges it can still carry.
+   Each rule only narrows those ranges, and each is sound, so when all of them
+   together settle every edge, the result is the only solution there is. */
+function hashiSolve(puz, tier) {
+  const {islands, edges} = puz;
+  const E = edges.length, I = islands.length;
+  const cross = puz.cross || hashiCrossings(edges, puz.n);
+  const edgesOf = islands.map(() => []);
+  edges.forEach((e, k) => { edgesOf[e.a].push(k); edgesOf[e.b].push(k); });
+
+  const lo = new Uint8Array(E), hi = new Uint8Array(E);
+  edges.forEach((e, k) => { hi[k] = Math.min(2, islands[e.a].k, islands[e.b].k); });
+
+  /* Each rule returns -1 on a contradiction, 1 if it narrowed something and
+     0 if it found nothing new. */
+
+  /* An island's other edges must leave room for this one, and can't carry
+     the rest of its count on their own. A narrowed edge closes every edge
+     it would cross. */
+  function counting(lo, hi) {
+    let changed = 0;
+    for (let i = 0; i < I; i++) {
+      const own = edgesOf[i], k = islands[i].k;
+      let sumLo = 0, sumHi = 0;
+      for (const e of own) { sumLo += lo[e]; sumHi += hi[e]; }
+      if (sumLo > k || sumHi < k) return -1;
+      /* sums go stale as edges narrow below, which only weakens the bounds */
+      for (const e of own) {
+        const needLo = k - (sumHi - hi[e]), capHi = k - (sumLo - lo[e]);
+        if (needLo > lo[e]) { lo[e] = needLo; changed = 1; }
+        if (capHi < hi[e]) { hi[e] = capHi; changed = 1; }
+        if (lo[e] > hi[e]) return -1;
+      }
+    }
+    for (let e = 0; e < E; e++) {
+      if (!lo[e]) continue;
+      for (const f of cross[e]) {
+        if (lo[f]) return -1;
+        if (hi[f]) { hi[f] = 0; changed = 1; }
+      }
+    }
+    return changed;
+  }
+
+  /* Islands already joined by sure bridges form components. An edge may not
+     close off a component -- leave every island in it satisfied -- unless
+     that component is the whole puzzle. */
+  function isolation(lo, hi) {
+    const comp = Int16Array.from({length: I}, (_, i) => i);
+    const find = x => { while (comp[x] !== x) x = comp[x] = comp[comp[x]]; return x; };
+    for (let e = 0; e < E; e++) {
+      if (lo[e]) comp[find(edges[e].a)] = find(edges[e].b);
+    }
+    const need = new Int16Array(I), size = new Int16Array(I);
+    for (let i = 0; i < I; i++) {
+      let left = islands[i].k;
+      for (const e of edgesOf[i]) left -= lo[e];
+      need[find(i)] += left;
+      size[find(i)]++;
+    }
+    for (let i = 0; i < I; i++) {
+      if (comp[i] === i && need[i] === 0 && size[i] < I) return -1;
+    }
+    let changed = 0;
+    for (let e = 0; e < E; e++) {
+      if (lo[e] === hi[e]) continue;
+      const A = find(edges[e].a), B = find(edges[e].b);
+      const total = need[A] + (A === B ? 0 : need[B]);
+      const merged = size[A] + (A === B ? 0 : size[B]);
+      while (hi[e] > lo[e]) {
+        const left = total - 2 * (hi[e] - lo[e]);
+        if (left < 0 || (left === 0 && merged < I)) { hi[e]--; changed = 1; }
+        else break;
+      }
+    }
+    return changed;
+  }
+
+  /* Any edge whose loss would split the graph of still-possible edges must
+     carry a bridge. Tarjan's bridge-finding, though here those are called
+     cut edges, to keep them apart from the puzzle's bridges. */
+  function cutEdges(lo, hi) {
+    const disc = new Int16Array(I).fill(-1), low = new Int16Array(I);
+    const cut = [];
+    let time = 0;
+    /* iterative, so a long chain of islands can't overflow the stack */
+    const stack = [[0, -1, 0]];
+    disc[0] = low[0] = time++;
+    while (stack.length) {
+      const top = stack[stack.length - 1];
+      const [v, viaEdge] = top;
+      const own = edgesOf[v];
+      if (top[2] < own.length) {
+        const e = own[top[2]++];
+        if (!hi[e] || e === viaEdge) continue;
+        const w = edges[e].a === v ? edges[e].b : edges[e].a;
+        if (disc[w] === -1) {
+          disc[w] = low[w] = time++;
+          stack.push([w, e, 0]);
+        } else if (disc[w] < low[v]) low[v] = disc[w];
+      } else {
+        stack.pop();
+        if (viaEdge === -1) continue;
+        const u = edges[viaEdge].a === v ? edges[viaEdge].b : edges[viaEdge].a;
+        if (low[v] < low[u]) low[u] = low[v];
+        if (low[v] > disc[u]) cut.push(viaEdge);
+      }
+    }
+    if (time < I) return -1;
+    let changed = 0;
+    for (const e of cut) if (!lo[e]) { lo[e] = 1; changed = 1; }
+    return changed;
+  }
+
+  function fixpoint(lo, hi, top, used) {
+    for (;;) {
+      let r = counting(lo, hi);
+      if (r < 0) return false;
+      if (r) { used[0] = Math.max(used[0], 1); continue; }
+      if (top < 2) return true;
+      r = isolation(lo, hi);
+      if (r < 0) return false;
+      if (r) { used[0] = Math.max(used[0], 2); continue; }
+      if (top < 3) return true;
+      r = cutEdges(lo, hi);
+      if (r < 0) return false;
+      if (r) { used[0] = 3; continue; }
+      r = lookahead(lo, hi);
+      if (r < 0) return false;
+      if (r) { used[0] = 3; continue; }
+      return true;
+    }
+  }
+
+  /* Try each end of an undecided edge's range on a copy and run the cheaper
+     tiers; a value that leads to a contradiction is ruled out. One level
+     deep only. */
+  function lookahead(lo, hi) {
+    for (let e = 0; e < E; e++) {
+      if (lo[e] === hi[e]) continue;
+      for (const x of [lo[e], hi[e]]) {
+        const l2 = Uint8Array.from(lo), h2 = Uint8Array.from(hi);
+        l2[e] = h2[e] = x;
+        if (fixpoint(l2, h2, 2, [0])) continue;
+        if (x === lo[e]) lo[e]++; else hi[e]--;
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  const used = [0];
+  const ok = fixpoint(lo, hi, tier, used);
+  let solved = ok && lo.every((v, e) => v === hi[e]);
+  if (solved) solved = hashiFinalCheck(puz, lo, cross);
+  return {lo, hi, solved, tierUsed: used[0]};
+}
+
+/* Every island's count met, no two used edges crossing, and the islands
+   joined into one piece -- a BFS, as in whitesConnected. */
+function hashiFinalCheck(puz, val, cross) {
+  const {islands, edges} = puz;
+  const sum = new Int16Array(islands.length);
+  const adj = islands.map(() => []);
+  for (let e = 0; e < edges.length; e++) {
+    if (!val[e]) continue;
+    for (const f of cross[e]) if (val[f]) return false;
+    sum[edges[e].a] += val[e]; sum[edges[e].b] += val[e];
+    adj[edges[e].a].push(edges[e].b); adj[edges[e].b].push(edges[e].a);
+  }
+  if (islands.some((p, i) => sum[i] !== p.k)) return false;
+  const seen = new Uint8Array(islands.length);
+  const q = [0];
+  seen[0] = 1;
+  while (q.length) {
+    const i = q.pop();
+    for (const j of adj[i]) if (!seen[j]) { seen[j] = 1; q.push(j); }
+  }
+  return seen.every(Boolean);
+}
+
+/* ---------- independent check ---------- */
+
+/* Plain backtracking over the edges in their fixed order, each taking 0, 1
+   or 2 bridges. It prunes only on the islands' counts and on the crossing
+   table, and checks connectivity with its own union-find once every edge is
+   set; none of the logic solver's rules are used. An aborted count has not
+   seen the whole tree, so callers must treat it as a failure. */
+function countHashiSolutions(puz, limit, maxSteps = 2000000) {
+  const {islands, edges} = puz;
+  const E = edges.length, I = islands.length;
+  const cross = puz.cross || hashiCrossings(edges, puz.n);
+  /* the edge after which an island has nothing left to be assigned */
+  const lastEdge = new Int16Array(I).fill(-1);
+  edges.forEach((e, k) => { lastEdge[e.a] = k; lastEdge[e.b] = k; });
+  const val = new Uint8Array(E), got = new Int16Array(I);
+  const found = [];
+  let steps = 0, aborted = false;
+
+  function joined() {
+    const parent = Int16Array.from({length: I}, (_, i) => i);
+    const root = x => { while (parent[x] !== x) x = parent[x]; return x; };
+    let parts = I;
+    for (let e = 0; e < E; e++) {
+      if (!val[e]) continue;
+      const a = root(edges[e].a), b = root(edges[e].b);
+      if (a !== b) { parent[a] = b; parts--; }
+    }
+    return parts === 1;
+  }
+
+  function go(e) {
+    if (++steps > maxSteps) { aborted = true; return true; }
+    if (e === E) {
+      for (let i = 0; i < I; i++) if (got[i] !== islands[i].k) return false;
+      if (!joined()) return false;
+      found.push(Uint8Array.from(val));
+      return found.length >= limit;
+    }
+    const {a, b} = edges[e];
+    for (let v = 0; v <= 2; v++) {
+      if (got[a] + v > islands[a].k || got[b] + v > islands[b].k) break;
+      if (v && cross[e].some(f => f < e && val[f])) break;
+      got[a] += v; got[b] += v; val[e] = v;
+      const closes = (lastEdge[a] !== e || got[a] === islands[a].k) &&
+                     (lastEdge[b] !== e || got[b] === islands[b].k);
+      if (closes && go(e + 1)) return true;
+      got[a] -= v; got[b] -= v; val[e] = 0;
+    }
+    return false;
+  }
+
+  go(0);
+  return {count: found.length, solutions: found, aborted};
+}
+
+/* ---------- generator ---------- */
+
+/* More double bridges pin the counts down and make for an easier puzzle;
+   longer bridges and more cross links (cycles) make it harder. Each level
+   must actually need its own rules: needsTier rejects a puzzle that the
+   lower tiers already solve, so medium always takes the isolation rule and
+   hard always takes connectivity or lookahead. */
+const HASHI_CFG = {
+  easy:   {n: 7,  minIslands: 10, maxIslands: 13, maxLen: 4, pDouble: 0.45, pExtra: 0.10, tier: 1},
+  medium: {n: 9,  minIslands: 17, maxIslands: 23, maxLen: 5, pDouble: 0.35, pExtra: 0.15, tier: 2, needsTier: 2},
+  hard:   {n: 11, minIslands: 25, maxIslands: 32, maxLen: 6, pDouble: 0.30, pExtra: 0.20, tier: 3,
+           needsTier: 3}
+};
+
+/* Grows a connected layout outward from one island. The bridges laid while
+   growing are themselves a solution, so the puzzle always has one. */
+function hashiLayout(cfg) {
+  const n = cfg.n;
+  const occ = new Uint8Array(n * n);
+  const rand = m => Math.floor(Math.random() * m);
+  const isl = [], bridges = [];
+  const weight = () => Math.random() < cfg.pDouble ? 2 : 1;
+  const touchesIsland = (r, c) => [[0, 1], [1, 0], [0, -1], [-1, 0]].some(([dr, dc]) => {
+    const y = r + dr, x = c + dc;
+    return y >= 0 && y < n && x >= 0 && x < n && occ[y * n + x] === HS_ISLAND;
+  });
+
+  const r0 = 1 + rand(n - 2), c0 = 1 + rand(n - 2);
+  occ[r0 * n + c0] = HS_ISLAND;
+  isl.push({r: r0, c: c0});
+
+  const target = cfg.minIslands + rand(cfg.maxIslands - cfg.minIslands + 1);
+  for (let tries = 0; tries < 2000 && isl.length < target; tries++) {
+    const a = rand(isl.length);
+    const [dr, dc] = [[0, 1], [1, 0], [0, -1], [-1, 0]][rand(4)];
+    const L = 2 + rand(cfg.maxLen - 1);
+    const r = isl[a].r + dr * L, c = isl[a].c + dc * L;
+    if (r < 0 || r >= n || c < 0 || c >= n || occ[r * n + c] !== HS_EMPTY) continue;
+    if (touchesIsland(r, c)) continue;
+    let clear = true;
+    for (let s = 1; s < L && clear; s++) clear = occ[(isl[a].r + dr * s) * n + isl[a].c + dc * s] === HS_EMPTY;
+    if (!clear) continue;
+    for (let s = 1; s < L; s++) occ[(isl[a].r + dr * s) * n + isl[a].c + dc * s] = dr ? HS_BRIDGE_V : HS_BRIDGE_H;
+    occ[r * n + c] = HS_ISLAND;
+    isl.push({r, c});
+    bridges.push({a, b: isl.length - 1, w: weight()});
+  }
+  if (isl.length < cfg.minIslands) return null;
+
+  /* Cross links close cycles, which is where alternative solutions come
+     from, so they stay rare. Scanning to the first occupied cell finds
+     exactly the islands seen across empty cells. */
+  const index = new Map(isl.map((p, i) => [p.r * n + p.c, i]));
+  const linked = new Set(bridges.map(({a, b}) => Math.min(a, b) + "," + Math.max(a, b)));
+  for (const a of shuffle([...isl.keys()])) {
+    for (const [dr, dc] of shuffle([[0, 1], [1, 0], [0, -1], [-1, 0]])) {
+      let r = isl[a].r + dr, c = isl[a].c + dc;
+      const path = [];
+      while (r >= 0 && r < n && c >= 0 && c < n && occ[r * n + c] === HS_EMPTY) {
+        path.push(r * n + c); r += dr; c += dc;
+      }
+      if (r < 0 || r >= n || c < 0 || c >= n || occ[r * n + c] !== HS_ISLAND) continue;
+      const b = index.get(r * n + c);
+      const key = Math.min(a, b) + "," + Math.max(a, b);
+      if (linked.has(key) || Math.random() >= cfg.pExtra) continue;
+      linked.add(key);
+      for (const i of path) occ[i] = dr ? HS_BRIDGE_V : HS_BRIDGE_H;
+      bridges.push({a, b, w: weight()});
+    }
+  }
+
+  /* renumber in reading order, which is the order the counter walks */
+  const order = [...isl.keys()].sort((p, q) => (isl[p].r * n + isl[p].c) - (isl[q].r * n + isl[q].c));
+  const renum = new Int16Array(isl.length);
+  order.forEach((old, i) => { renum[old] = i; });
+  const islands = order.map(old => ({r: isl[old].r, c: isl[old].c, k: 0}));
+  const laid = bridges.map(({a, b, w}) => ({a: renum[a], b: renum[b], w}));
+  for (const {a, b, w} of laid) { islands[a].k += w; islands[b].k += w; }
+  return {islands, laid};
+}
+
+function makeHashi(level) {
+  const cfg = HASHI_CFG[level];
+  const n = cfg.n;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const layout = hashiLayout(cfg);
+    if (!layout) continue;
+    const {islands, laid} = layout;
+    const edges = hashiEdges(islands, n);
+    const solution = new Uint8Array(edges.length);
+    const edgeOf = new Map(edges.map((e, k) => [e.a + "," + e.b, k]));
+    for (const {a, b, w} of laid) solution[edgeOf.get(Math.min(a, b) + "," + Math.max(a, b))] = w;
+    const puz = {kind: "hashi", n, islands, edges, solution};
+    puz.cross = hashiCrossings(edges, n);
+
+    const res = hashiSolve(puz, cfg.tier);
+    if (!res.solved || res.tierUsed < (cfg.needsTier || 0)) continue;
+    if (res.lo.some((v, e) => v !== solution[e])) continue;
+    const check = countHashiSolutions(puz, 2);
+    if (check.aborted || check.count !== 1) continue;
+    puz.tierUsed = res.tierUsed;
+    return puz;
+  }
+  return null;
+}
+
 /* ============================================================
    Type-specific data
    ============================================================ */
@@ -2185,7 +2568,17 @@ const TYPES = {
     }},
   hitori: {name: "Hitori", family: "hitori", symmetry: false,
     rules: "Väritä ruutuja niin, ettei millään rivillä tai sarakkeessa ole samaa lukua kahdesti värittämättömissä ruuduissa. Värjätyt ruudut eivät saa koskettaa toisiaan sivuistaan, ja värjäämättömien on muodostettava yhtenäinen alue.",
-    cell: {1: "20mm", 2: "13mm", 4: "10mm", sol: "8mm"}}
+    cell: {1: "20mm", 2: "13mm", 4: "10mm", sol: "8mm"}},
+  hashi: {name: "Sillat", family: "hashi", symmetry: false,
+    rules: "Yhdistä saaret silloilla. Sillat kulkevat suoraan vaaka- tai pystysuunnassa, eivätkä ne saa mennä ristiin eivätkä kulkea saaren yli. Kahden saaren välillä voi olla yksi tai kaksi siltaa. Saaren luku kertoo, montako siltaa siihen liittyy. Lopuksi kaikkien saarten on oltava yhteydessä toisiinsa siltoja pitkin.",
+    cell: {1: "15mm", 2: "9mm", 4: "7.5mm", sol: "6mm"},
+    /* the grid grows from 7 to 11 across the levels, so each level gets its
+       own sizes */
+    cellByLevel: {
+      easy:   {1: "22mm", 2: "14mm", 4: "11mm",  sol: "9mm"},
+      medium: {1: "18mm", 2: "11mm", 4: "9mm",   sol: "7.5mm"},
+      hard:   {1: "15mm", 2: "9mm",  4: "7.5mm", sol: "6mm"}
+    }}
 };
 
 const LEVEL_LABEL = {easy: "helppo", medium: "keskitaso", hard: "vaikea"};
@@ -2585,8 +2978,61 @@ function renderSkyscrapers(item, isSolution) {
   return wrap;
 }
 
+/* One SVG in cell units: faint guide dots at every cell centre so the
+   bridges can be drawn straight, and the islands on top. The solution draws
+   the bridges first, so the white circles cover their ends, and keeps the
+   numbers so the answer can be checked against them. */
+function renderHashi(item, isSolution) {
+  const n = item.n;
+  const svgEl = t => document.createElementNS("http://www.w3.org/2000/svg", t);
+  const svg = svgEl("svg");
+  svg.setAttribute("class", "hashi");
+  svg.setAttribute("viewBox", `0 0 ${n} ${n}`);
+  svg.style.width = svg.style.height = `calc(var(--cell) * ${n})`;
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Sillat-tehtävä");
+
+  const dots = [];
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    dots.push(`M${c + 0.46} ${r + 0.5}a0.04 0.04 0 1 0 0.08 0a0.04 0.04 0 1 0 -0.08 0`);
+  }
+  const guide = svgEl("path");
+  guide.setAttribute("class", "hdots");
+  guide.setAttribute("d", dots.join(""));
+  svg.appendChild(guide);
+
+  if (isSolution) {
+    const d = [];
+    item.edges.forEach((e, k) => {
+      const w = item.solution[k];
+      if (!w) return;
+      const p = item.islands[e.a], q = item.islands[e.b];
+      for (const off of w === 2 ? [-0.11, 0.11] : [0]) {
+        const dx = e.dir === "v" ? off : 0, dy = e.dir === "h" ? off : 0;
+        d.push(`M${p.c + 0.5 + dx} ${p.r + 0.5 + dy}L${q.c + 0.5 + dx} ${q.r + 0.5 + dy}`);
+      }
+    });
+    const bridges = svgEl("path");
+    bridges.setAttribute("class", "hbridges");
+    bridges.setAttribute("d", d.join(""));
+    svg.appendChild(bridges);
+  }
+
+  for (const {r, c, k} of item.islands) {
+    const circle = svgEl("circle");
+    circle.setAttribute("class", "hisland");
+    circle.setAttribute("cx", c + 0.5); circle.setAttribute("cy", r + 0.5); circle.setAttribute("r", 0.38);
+    const text = svgEl("text");
+    text.setAttribute("x", c + 0.5); text.setAttribute("y", r + 0.5);
+    text.textContent = String(k);
+    svg.append(circle, text);
+  }
+  return svg;
+}
+
 const RENDER = {sudoku: renderSudoku, kropki: renderKropki, killer: renderKiller, futoshiki: renderFutoshiki,
-  kakuro: renderKakuro, hitori: renderHitori, nonogram: renderNonogram, skyscrapers: renderSkyscrapers};
+  kakuro: renderKakuro, hitori: renderHitori, nonogram: renderNonogram, skyscrapers: renderSkyscrapers,
+  hashi: renderHashi};
 
 /* ============================================================
    Puzzle creation
@@ -2617,6 +3063,10 @@ function buildOne(type, level, symmetric) {
   if (fam === "kakuro") {
     const r = makeKakuro(level);
     return r ? {kind: fam, size: r.size, black: r.black, runs: r.runs, solution: r.solution} : null;
+  }
+  if (fam === "hashi") {
+    const r = makeHashi(level);
+    return r ? {kind: fam, n: r.n, islands: r.islands, edges: r.edges, solution: r.solution} : null;
   }
   if (fam === "nonogram") {
     const r = makeNonogram(level);

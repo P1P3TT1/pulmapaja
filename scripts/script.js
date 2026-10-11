@@ -69,11 +69,10 @@ const TYPES = {
 
 const LEVEL_LABEL = {easy: "helppo", medium: "keskitaso", hard: "vaikea"};
 
-/* Where Ratkaise ruudulla is hosted, for example
-   "https://example.github.io/pulmapaja/". When set, every printed puzzle
+/* Where Ratkaise ruudulla is hosted (GitHub Pages). Every printed puzzle
    gets a small QR code that opens it on screen at PLAY_BASE_URL + "#" + its
-   code. Empty, the sheets print exactly as without the feature. */
-const PLAY_BASE_URL = "";
+   code. Set it to "" to print without the codes. */
+const PLAY_BASE_URL = "https://p1p3tt1.github.io/pulmapaja/";
 
 /* ============================================================
    Rendering

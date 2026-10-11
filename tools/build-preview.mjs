@@ -3,7 +3,7 @@
 //   node tools/build-preview.mjs --open <type>:<level> [--mode print] [--play-url <url>]
 //
 // --mode print starts on generated print sheets instead of play mode, and
-// --play-url sets PLAY_BASE_URL in script.js, so the sheets carry QR codes.
+// --play-url overrides PLAY_BASE_URL in script.js for this build only.
 //
 // Writes previews/pulmapaja-preview.html: index.html with the stylesheet and
 // every local script inlined, no document wrappers (the artifact host adds
@@ -38,12 +38,12 @@ const scripts = [...head.matchAll(/<script src="(?!https?:)([^"]+)"[^>]*><\/scri
 /* a literal </script> inside a script would end the inline block early */
 const inlineJs = s => s.replace(/<\/script/gi, "<\\/script");
 
-const EMPTY_URL = 'const PLAY_BASE_URL = "";';
+const BASE_URL = /^const PLAY_BASE_URL = "[^"]*";$/m;
 const source = p => {
   let js = read(p);
   if (p === "scripts/script.js" && playUrl) {
-    if (!js.includes(EMPTY_URL)) { console.error(`${p}: ${EMPTY_URL} not found`); process.exit(1); }
-    js = js.replace(EMPTY_URL, `const PLAY_BASE_URL = ${JSON.stringify(playUrl)};`);
+    if (!BASE_URL.test(js)) { console.error(`${p}: the PLAY_BASE_URL line was not found`); process.exit(1); }
+    js = js.replace(BASE_URL, `const PLAY_BASE_URL = ${JSON.stringify(playUrl)};`);
   }
   return js;
 };

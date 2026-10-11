@@ -11,6 +11,8 @@
     <script src="scripts/generators.js" defer></script>
     <script src="scripts/codec.js" defer></script>
     <script src="scripts/script.js" defer></script>
+    <script src="scripts/store.js" defer></script>
+    <script src="scripts/play.js" defer></script>
   </head>
   <body>
     <div class="app">
@@ -20,6 +22,14 @@
           Pulmapaja
         </h1>
         <p class="lede">Tee tulostusvalmiita pulmatehtäviä. Jokaisella on täsmälleen yksi ratkaisu, ja se löytyy päättelemällä.</p>
+
+        <div class="field">
+          <span class="label" id="lbl-tapa">Käyttötapa</span>
+          <div class="seg" role="group" aria-labelledby="lbl-tapa" id="seg-mode">
+            <button type="button" data-value="print" aria-pressed="true">Tulosta</button>
+            <button type="button" data-value="play" aria-pressed="false">Ratkaise ruudulla</button>
+          </div>
+        </div>
 
         <div class="field">
           <label for="type">Pulmatyyppi</label>
@@ -105,14 +115,14 @@
           </div>
         </div>
 
-        <div class="field">
+        <div class="field" id="field-title">
           <label for="title">Otsikko</label>
           <input type="text" id="title" value="" placeholder="Pulmatyypin nimi" maxlength="60">
         </div>
 
         <div class="field">
           <span class="label">Asetukset</span>
-          <label class="check"><input type="checkbox" id="opt-solutions" checked> Liitä ratkaisut loppuun</label>
+          <label class="check" id="sol-wrap"><input type="checkbox" id="opt-solutions" checked> Liitä ratkaisut loppuun</label>
           <label class="check" id="sym-wrap"><input type="checkbox" id="opt-symmetry" checked> Symmetrinen ruudukko</label>
         </div>
 
@@ -123,12 +133,68 @@
 
         <p class="status" id="status" role="status" aria-live="polite"></p>
         <p class="rules" id="rules"></p>
-        <p class="hint">Tallenna PDF-tiedostoksi valitsemalla tulostusikkunassa tulostimeksi <strong>Tallenna PDF-muodossa</strong>.</p>
+        <p class="hint" id="pdf-hint">Tallenna PDF-tiedostoksi valitsemalla tulostusikkunassa tulostimeksi <strong>Tallenna PDF-muodossa</strong>.</p>
       </aside>
 
       <main class="preview" id="preview">
         <div class="empty" id="empty">Valitse pulmatyyppi ja vaikeustaso, niin tehtävät ilmestyvät tähän.</div>
       </main>
+
+      <div class="play" id="play" hidden>
+        <section class="play-panel" aria-labelledby="play-name">
+          <div class="play-col">
+            <div class="play-head">
+              <h2 id="play-name">Sudoku 9 × 9</h2>
+              <span class="tag" id="play-tag"></span>
+              <span class="clock" id="play-clock" aria-label="Käytetty aika">0:00</span>
+            </div>
+            <div class="play-board" id="play-board" tabindex="0" role="group"
+                 aria-label="Ruudukko. Liiku nuolinäppäimillä ja kirjoita numero."></div>
+            <div class="play-empty" id="play-empty">Valitse pulmatyyppi ja vaikeustaso ja luo tehtävä.</div>
+            <div class="done-banner" id="play-done" hidden></div>
+            <div class="pad" id="play-pad" role="group" aria-label="Numerot"></div>
+            <div class="tools" id="play-tools">
+              <button type="button" id="t-notes" aria-pressed="false">Muistiin&shy;panot</button>
+              <button type="button" id="t-erase">Pyyhi</button>
+              <button type="button" id="t-undo">Kumoa</button>
+              <button type="button" id="t-check">Tarkista</button>
+            </div>
+            <p class="play-status" id="play-status" role="status" aria-live="polite"></p>
+            <p class="keys" id="play-keys"></p>
+            <p class="sr" id="play-sr" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <aside class="play-info">
+          <section class="sec" aria-labelledby="h-share">
+            <span class="label" id="h-share">Jaa ja jatka</span>
+            <div class="code">
+              <div class="code-head"><strong>Tehtävä</strong><span id="len-a"></span></div>
+              <p class="note">Ystävä saa saman tehtävän tyhjänä.</p>
+              <textarea id="code-a" rows="3" readonly aria-label="Tehtävän koodi"></textarea>
+              <div class="row"><button type="button" class="btn ghost small" data-copy="code-a">Kopioi</button></div>
+            </div>
+            <div class="code">
+              <div class="code-head"><strong>Tehtävä ja edistyminen</strong><span id="len-b"></span></div>
+              <p class="note">Jatka toisella laitteella siitä, mihin jäit. Koodi päivittyy jokaisen siirron jälkeen.</p>
+              <textarea id="code-b" rows="4" readonly aria-label="Tehtävän ja edistymisen koodi"></textarea>
+              <div class="row"><button type="button" class="btn ghost small" data-copy="code-b">Kopioi</button></div>
+            </div>
+          </section>
+
+          <section class="sec" aria-labelledby="h-open">
+            <label class="label" id="h-open" for="open-in">Avaa koodilla</label>
+            <textarea id="open-in" rows="3" placeholder="Liitä koodi tai koko linkki"></textarea>
+            <div class="row"><button type="button" class="btn ghost small" id="open-btn">Avaa tehtävä</button></div>
+            <p class="err" id="open-err" role="alert"></p>
+          </section>
+
+          <section class="sec" aria-labelledby="h-saved">
+            <span class="label" id="h-saved">Tallennetut tässä selaimessa</span>
+            <ul class="saved" id="saved"></ul>
+          </section>
+        </aside>
+      </div>
     </div>
   </body>
 </html>

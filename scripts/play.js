@@ -9,7 +9,8 @@
 
 window.Play = (() => {
   /* the types play mode can show so far; the others follow phase by phase */
-  const PLAYABLE = new Set(["sudoku9"]);
+  const PLAYABLE = new Set(["sudoku9", "sudoku6", "diagonal", "jigsaw", "kropki", "killer",
+    "futoshiki", "skyscrapers", "kakuro"]);
   const NOT_YET = "Tämän pulmatyypin ratkaiseminen ruudulla ei ole vielä käytössä. Sen voi kuitenkin tulostaa.";
   const CODE_IN_HASH = new RegExp(`^[A-Za-z0-9_-]{${CODE_MIN_LENGTH},}$`);
 
@@ -17,8 +18,14 @@ window.Play = (() => {
   const playEl = $("play"), boardEl = $("play-board"), padEl = $("play-pad");
   const statusEl = $("play-status"), srEl = $("play-sr"), openErr = $("open-err");
 
-  /* P: {type, level, item, prog: {val, notes}, id, elapsed, done, n, N, d,
-         given, peers, cells}  – null until a puzzle is open */
+  /* P: {type, level, item, prog: {val, notes}, id, elapsed, done,
+         n       cells per row          N      cells in all
+         d       digit range            total  cells a player fills, givens included
+         given   1 per given            open   1 per cell that takes part (not a kakuro black cell)
+         peers   per cell, the cells sharing a unit with it: row, column,
+                 region, diagonal, killer cage or kakuro run
+         counted every digit appears n times, so the pad can count down
+         cells}  – null until a puzzle is open */
   let P = null, sel = -1, notesMode = false, undo = [], busy = false, ticks = 0;
 
   const say = t => { statusEl.textContent = t; };
@@ -29,7 +36,7 @@ window.Play = (() => {
   };
   const levelTag = (level, item) => level === "none" ? `${item.n} × ${item.n}` : (LEVEL_LABEL[level] || "");
   const filledCount = () => { let f = 0; for (let i = 0; i < P.N; i++) if (P.prog.val[i]) f++; return f; };
-  const solved = () => P.prog.val.every((v, i) => v === P.item.solution[i]);
+  const solved = () => P.prog.val.every((v, i) => !P.open[i] || v === P.item.solution[i]);
   const ago = t => {
     const s = (Date.now() - t) / 1000;
     if (s < 60) return "juuri nyt";
@@ -65,24 +72,35 @@ window.Play = (() => {
   function buildBoard() {
     const {item, prog, N} = P;
     /* the renderer draws the player's digits where the givens would be */
-    const g = RENDER[item.kind](Object.assign({}, item, {puz: prog.val}), false);
+    const g = RENDER[item.kind](Object.assign({}, item, {puz: prog.val, puzzle: prog.val}), false);
     g.removeAttribute("role");
     g.removeAttribute("aria-label");
-    P.cells = [...g.querySelectorAll(":scope > .cell")].slice(0, N);
+    /* every renderer marks the play cells, and only them, with .cell, in
+       reading order; clue strips, gaps and sums use other classes */
+    P.cells = [...g.querySelectorAll(".cell")].slice(0, N);
     P.cells.forEach((c, i) => {
       /* the value moves into its own span, so marks the renderer put in the
          cell (a cage sum) stay when the value changes */
       for (const t of [...c.childNodes]) if (t.nodeType === 3) t.remove();
+      /* the diagonal shading is inline on paper; as a class it gives way to
+         the selection and follows the dark theme */
+      if (c.style.background) { c.style.background = ""; c.classList.add("diag"); }
       const v = document.createElement("span");
       v.className = "v";
       c.appendChild(v);
       c.dataset.i = i;
       c.dataset.base = c.className;
+      if (!P.open[i]) c.setAttribute("aria-label", clueLabel(i));
     });
     boardEl.replaceChildren(g);
-    boardEl.setAttribute("aria-label", (item.kind === "sudoku" ? "Sudokuruudukko" : "Ruudukko") +
+    boardEl.setAttribute("aria-label", (["sudoku", "kropki", "killer"].includes(item.kind) ? "Sudokuruudukko" : "Ruudukko") +
       ". Liiku nuolinäppäimillä ja kirjoita numero.");
-    playEl.style.setProperty("--n", P.n);
+    /* the board's width in cells, which --cell is fitted to: futoshiki adds
+       its sign gaps, pilvenpiirtäjät a clue strip on each side */
+    const span = item.kind === "futoshiki" ? P.n + (P.n - 1) * 0.42
+      : item.kind === "skyscrapers" ? P.n + 2 : P.n;
+    playEl.style.setProperty("--span", span);
+    playEl.style.setProperty("--d", P.d);
 
     padEl.replaceChildren();
     for (let d = 1; d <= P.d; d++) {
@@ -104,16 +122,27 @@ window.Play = (() => {
     return false;
   }
 
+  const where = i => `Rivi ${((i / P.n) | 0) + 1}, sarake ${(i % P.n) + 1}: `;
+
+  /* a kakuro black cell, with the sums it carries */
+  function clueLabel(i) {
+    const sums = [];
+    for (const run of P.item.runs || []) {
+      if (run.clue === i) sums.push(`${run.dir === "h" ? "vaakasumma" : "pystysumma"} ${run.sum}`);
+    }
+    return where(i) + "vihjeruutu" + (sums.length ? ", " + sums.join(", ") : "");
+  }
+
   function cellLabel(i) {
+    if (!P.open[i]) return clueLabel(i);
     const {val, notes} = P.prog, v = val[i];
-    const where = `Rivi ${((i / P.n) | 0) + 1}, sarake ${(i % P.n) + 1}: `;
-    if (v) return where + (P.given[i] ? "annettu " : "") + v;
+    if (v) return where(i) + (P.given[i] ? "annettu " : "") + v;
     if (notes[i]) {
       const list = [];
       for (let d = 1; d <= P.d; d++) if (notes[i] & bitOf(d)) list.push(d);
-      return where + "tyhjä, muistiinpanot " + list.join(", ");
+      return where(i) + "tyhjä, muistiinpanot " + list.join(", ");
     }
-    return where + "tyhjä";
+    return where(i) + "tyhjä";
   }
 
   function render() {
@@ -122,6 +151,7 @@ window.Play = (() => {
     const peerSet = sel >= 0 ? new Set(P.peers[sel]) : null;
     const cols = Math.ceil(Math.sqrt(P.d));
     P.cells.forEach((c, i) => {
+      if (!P.open[i]) return;
       const v = val[i];
       let cls = c.dataset.base;
       if (P.given[i]) cls += " given"; else if (v) cls += " user";
@@ -146,12 +176,15 @@ window.Play = (() => {
     const counts = new Array(P.d + 1).fill(0);
     for (let i = 0; i < P.N; i++) counts[val[i]]++;
     padEl.classList.toggle("notes-on", notesMode);
+    /* a kakuro uses each digit any number of times, so its pad has nothing
+       to count down */
     for (const b of padEl.children) {
-      const d = +b.dataset.d, left = P.n - counts[d];
-      b.querySelector("small").textContent = notesMode ? "" : (left > 0 ? left : "");
+      const d = +b.dataset.d, left = P.counted ? P.n - counts[d] : 1;
+      b.querySelector("small").textContent = notesMode || !P.counted ? "" : (left > 0 ? left : "");
       b.classList.toggle("used", !notesMode && left <= 0);
       b.classList.toggle("on", notesMode && sel >= 0 && !!(notes[sel] & bitOf(d)));
-      b.setAttribute("aria-label", notesMode ? `Muistiinpano ${d}` : `Numero ${d}, jäljellä ${Math.max(0, left)}`);
+      b.setAttribute("aria-label", notesMode ? `Muistiinpano ${d}`
+        : P.counted ? `Numero ${d}, jäljellä ${Math.max(0, left)}` : `Numero ${d}`);
     }
     $("t-notes").setAttribute("aria-pressed", String(notesMode));
     $("play-name").textContent = TYPES[P.type].name;
@@ -236,14 +269,36 @@ window.Play = (() => {
 
   /* ---------- opening ---------- */
 
+  /* For each cell, the cells it may not repeat a digit with. The spec's
+     units cover rows, columns, regions and diagonals; a killer adds its
+     cage, and a kakuro has only its runs. */
+  function peersOf(item) {
+    if (item.kind === "kakuro") {
+      const N = item.size * item.size, sets = Array.from({length: N}, () => new Set());
+      for (const run of item.runs) for (const i of run.cells) for (const j of run.cells) if (i !== j) sets[i].add(j);
+      return sets.map(x => [...x]);
+    }
+    if (item.kind !== "killer") return item.spec.peers;
+    return item.spec.peers.map((list, i) => {
+      const x = new Set(list);
+      for (const j of item.cages[item.cageOf[i]].cells) if (j !== i) x.add(j);
+      return [...x];
+    });
+  }
+
   function start(type, level, item, prog, elapsed, msg) {
-    const N = item.spec.N;
-    P = {type, level, item, prog, elapsed: elapsed || 0, n: item.spec.n, N, d: codeDigitRange(item),
-         peers: item.spec.peers, given: Uint8Array.from(item.puz, v => v ? 1 : 0)};
+    const kakuro = item.kind === "kakuro";
+    const n = kakuro ? item.size : item.spec.n, N = n * n;
+    const givens = item.puz || item.puzzle || new Uint8Array(N);
+    P = {type, level, item, prog, elapsed: elapsed || 0, n, N, d: codeDigitRange(item),
+         peers: peersOf(item), counted: !kakuro,
+         given: Uint8Array.from(givens, v => v ? 1 : 0),
+         open: kakuro ? Uint8Array.from(item.black, b => b ? 0 : 1) : new Uint8Array(N).fill(1)};
+    P.total = P.open.reduce((s, x) => s + x, 0);
     P.id = encodeCode(type, level, item, null).code;
     P.done = solved();
     undo = []; notesMode = false;
-    sel = P.done ? -1 : P.prog.val.findIndex(v => !v);
+    sel = P.done ? -1 : P.prog.val.findIndex((v, i) => !v && P.open[i]);
     playEl.classList.remove("no-puzzle");
     setRail(type, level);
     buildBoard();
@@ -287,11 +342,22 @@ window.Play = (() => {
     setTimeout(() => {
       const symmetric = TYPES[type].symmetry && el("opt-symmetry").checked;
       let item = null;
-      try { item = buildOne(type, level, symmetric); } finally { busy = false; el("generate").disabled = false; }
+      try {
+        const built = buildOne(type, level, symmetric);
+        /* a new puzzle goes through its code once, so it is exactly what
+           opening that code later gives (a kakuro drops digits left under
+           cells that were blackened while it was built) */
+        if (built) item = decodeCode(encodeCode(type, level, built, null).code);
+      } finally { busy = false; el("generate").disabled = false; }
       if (!item) { say("Tehtävän luonti ei onnistunut. Yritä uudelleen."); return; }
-      let g = 0;
-      for (const v of item.puz) if (v) g++;
-      start(type, level, item, emptyProgress(type, item), 0, `Uusi ${LEVEL_LABEL[level]} tehtävä, ${g} annettua numeroa.`);
+      let msg = `Uusi ${LEVEL_LABEL[level]} tehtävä`;
+      const givens = item.puz || item.puzzle;
+      if (givens) {
+        let g = 0;
+        for (const v of givens) if (v) g++;
+        msg += g === 0 ? ", ei annettuja numeroita" : g === 1 ? ", 1 annettu numero" : `, ${g} annettua numeroa`;
+      }
+      start(type, level, item, emptyProgress(type, item), 0, msg + ".");
       boardEl.focus({preventScroll: true});
     }, 30);
   }
@@ -299,7 +365,7 @@ window.Play = (() => {
   /* ---------- input ---------- */
 
   const snap = i => ({i, val: P.prog.val[i], notes: P.prog.notes[i]});
-  const editable = i => P && !P.done && i >= 0 && !P.given[i];
+  const editable = i => P && !P.done && i >= 0 && P.open[i] && !P.given[i];
 
   function enter(d, asNote) {
     if (!editable(sel)) return;
@@ -344,7 +410,7 @@ window.Play = (() => {
     let bad = 0;
     for (let i = 0; i < P.N; i++) if (!P.given[i] && val[i] && val[i] !== sol[i]) bad++;
     say(bad ? `${bad} ${bad === 1 ? "merkintä on" : "merkintää on"} väärin.`
-            : `Kaikki merkinnät ovat oikein. ${P.N - filledCount()} ruutua jäljellä.`);
+            : `Kaikki merkinnät ovat oikein. ${P.total - filledCount()} ruutua jäljellä.`);
   }
 
   function select(i) {
@@ -360,7 +426,7 @@ window.Play = (() => {
 
   boardEl.addEventListener("pointerdown", e => {
     const c = e.target.closest(".cell[data-i]");
-    if (!c || !P || P.done) return;
+    if (!c || !P || P.done || !P.open[+c.dataset.i]) return;
     select(+c.dataset.i);
     if (P.prog.val[sel] || P.prog.notes[sel]) srEl.textContent = cellLabel(sel);
     boardEl.focus({preventScroll: true});
@@ -374,12 +440,15 @@ window.Play = (() => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (k.startsWith("Arrow")) {
       if (P.done) return;
-      const n = P.n, i = sel < 0 ? 0 : sel;
-      let r = (i / n) | 0, c = i % n;
-      if (k === "ArrowUp") r = Math.max(0, r - 1);
-      if (k === "ArrowDown") r = Math.min(n - 1, r + 1);
-      if (k === "ArrowLeft") c = Math.max(0, c - 1);
-      if (k === "ArrowRight") c = Math.min(n - 1, c + 1);
+      /* steps over kakuro black cells; at the edge it stays put */
+      const step = {ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1]}[k];
+      if (!step) return;
+      const n = P.n, [dr, dc] = step;
+      let r = ((sel < 0 ? 0 : sel) / n) | 0, c = (sel < 0 ? 0 : sel) % n;
+      if (sel < 0) { const first = P.open.indexOf(1); r = (first / n) | 0; c = first % n; }
+      else for (let y = r + dr, x = c + dc; y >= 0 && y < n && x >= 0 && x < n; y += dr, x += dc) {
+        if (P.open[y * n + x]) { r = y; c = x; break; }
+      }
       select(r * n + c);
       srEl.textContent = cellLabel(sel);
       e.preventDefault();

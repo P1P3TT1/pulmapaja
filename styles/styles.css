@@ -311,6 +311,17 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .play.ctl-nonogram .play-board .grid{touch-action:none}
 .play.ctl-nonogram .play-board .grid .cell{font-size:calc(var(--cell)*.7);color:var(--ink-soft)}
 
+.play-board .hashi{touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
+.play-board .hashi .hdots{fill:var(--grid-thin)}
+.play-board .hashi .hbridges{stroke:var(--ink);stroke-width:2.5px}
+.play-board .hashi .hisland{fill:var(--board);stroke:var(--ink);stroke-width:2px;transition:fill .08s}
+.play-board .hashi text{fill:var(--ink);pointer-events:none}
+/* an island whose count is met steps back */
+.play-board .hashi .hisland.full{fill:var(--peer);stroke:var(--line)}
+.play-board .hashi text.full{fill:var(--ink-soft)}
+.play-board .hashi .hisland.sel{fill:var(--blue-soft);stroke:var(--blue);stroke-width:3px}
+.play-board .hashi .hdrag{stroke:var(--blue);stroke-width:2px;stroke-dasharray:4 4;stroke-linecap:round;vector-effect:non-scaling-stroke;pointer-events:none}
+
 .play-board .cell.given{font-weight:600}
 .play-board .cell.user{font-weight:500;color:var(--blue)}
 .play-board .cell.peer{background:var(--peer)}

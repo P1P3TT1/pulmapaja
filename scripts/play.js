@@ -2,8 +2,8 @@
 
 /* Ratkaise ruudulla: one puzzle solved on screen. The board is drawn by the
    print renderer itself, with the player's digits passed in place of the
-   givens, and then decorated: selection, highlights, notes, clashes, or the
-   shading marks of hitori and the nonogram. The
+   givens, and then decorated: selection, highlights, notes, clashes, the
+   shading marks of hitori and the nonogram, or the bridges of hashi. The
    whole state packs into a code (codec.js) that saves to this browser after
    every move (store.js), sits in the address bar, and can be copied to
    continue elsewhere. See docs/ratkaise-ruudulla.md §5–6. */
@@ -11,7 +11,7 @@
 window.Play = (() => {
   /* the types play mode can show so far; the others follow phase by phase */
   const PLAYABLE = new Set(["sudoku9", "sudoku6", "diagonal", "jigsaw", "kropki", "killer",
-    "futoshiki", "skyscrapers", "kakuro", "hitori", "nonogram"]);
+    "futoshiki", "skyscrapers", "kakuro", "hitori", "nonogram", "hashi"]);
   const NOT_YET = "Tämän pulmatyypin ratkaiseminen ruudulla ei ole vielä käytössä. Sen voi kuitenkin tulostaa.";
   const CODE_IN_HASH = new RegExp(`^[A-Za-z0-9_-]{${CODE_MIN_LENGTH},}$`);
 
@@ -19,8 +19,8 @@ window.Play = (() => {
   const playEl = $("play"), boardEl = $("play-board"), padEl = $("play-pad"), modesEl = $("play-modes");
   const statusEl = $("play-status"), srEl = $("play-sr"), openErr = $("open-err");
 
-  /* P: {type, level, item, prog: {val, notes} or {marks}, id, elapsed, done,
-         ctl     "digits" or "shading" (codec.js codeController)
+  /* P: {type, level, item, prog: {val, notes}, {marks} or {bridges}, id, elapsed, done,
+         ctl     "digits", "shading" or "bridges" (codec.js codeController)
          n       cells per row          N      cells in all
          d       digit range            total  cells a player fills, givens included
          given   1 per given            open   1 per cell that takes part (not a kakuro black cell)
@@ -31,6 +31,8 @@ window.Play = (() => {
   let P = null, sel = -1, notesMode = false, undo = [], busy = false, ticks = 0;
   /* nonogram: what a tap or a drag marks, and the drag in progress */
   let shadeMode = "fill", drag = null;
+  /* hashi: the drag from an island in progress */
+  let bridgeDrag = null;
 
   const say = t => { statusEl.textContent = t; };
   const fmtTime = s => {
@@ -40,6 +42,7 @@ window.Play = (() => {
   };
   const levelTag = (level, item) => level === "none" ? `${item.n} × ${item.n}` : (LEVEL_LABEL[level] || "");
   const filledCount = () => {
+    if (P.ctl === "bridges") return P.prog.bridges.reduce((s, w) => s + w, 0);
     const a = P.ctl === "shading" ? P.prog.marks : P.prog.val;
     let f = 0;
     for (let i = 0; i < P.N; i++) if (a[i]) f++;
@@ -47,6 +50,7 @@ window.Play = (() => {
   };
   /* hitori ignores circles and the nonogram crosses: only the shading counts */
   const solved = () => {
+    if (P.ctl === "bridges") return P.prog.bridges.every((w, e) => w === P.item.solution[e]);
     if (P.ctl !== "shading") return P.prog.val.every((v, i) => !P.open[i] || v === P.item.solution[i]);
     const m = P.prog.marks;
     if (P.item.kind === "hitori") return P.item.shaded.every((s, i) => (m[i] === 1) === (s === BLACK));
@@ -85,6 +89,8 @@ window.Play = (() => {
   /* ---------- board ---------- */
 
   function buildBoard() {
+    playEl.classList.toggle("ctl-bridges", P.ctl === "bridges");
+    if (P.ctl === "bridges") { buildHashi(); return; }
     const {item, prog, N} = P;
     /* the renderer draws the player's digits where the givens would be */
     const g = RENDER[item.kind](Object.assign({}, item, {puz: prog.val, puzzle: prog.val}), false);
@@ -220,6 +226,7 @@ window.Play = (() => {
   }
 
   function render() {
+    if (P.ctl === "bridges") { drawHashi(); renderHead(); return; }
     if (P.ctl === "shading") {
       const peerSet = sel >= 0 ? new Set(P.peers[sel]) : null;
       for (let i = 0; i < P.N; i++) renderShadeCell(i, peerSet);
@@ -349,6 +356,7 @@ window.Play = (() => {
      units cover rows, columns, regions and diagonals; a killer adds its
      cage, and a kakuro has only its runs. */
   function peersOf(item) {
+    if (item.kind === "hashi") return [];
     /* shading types repeat nothing; their row and column are highlighted to
        keep the place on a large grid */
     if (item.kind === "hitori" || item.kind === "nonogram") {
@@ -380,11 +388,11 @@ window.Play = (() => {
          peers: peersOf(item), counted: !kakuro,
          given: Uint8Array.from(givens, v => v ? 1 : 0),
          open: kakuro ? Uint8Array.from(item.black, b => b ? 0 : 1) : new Uint8Array(N).fill(1)};
-    P.total = P.open.reduce((s, x) => s + x, 0);
+    P.total = ctl === "bridges" ? item.solution.reduce((s, w) => s + w, 0) : P.open.reduce((s, x) => s + x, 0);
     P.id = encodeCode(type, level, item, null).code;
     P.done = solved();
     undo = []; notesMode = false;
-    sel = P.done || ctl === "shading" ? -1 : P.prog.val.findIndex((v, i) => !v && P.open[i]);
+    sel = P.done || ctl !== "digits" ? -1 : P.prog.val.findIndex((v, i) => !v && P.open[i]);
     playEl.classList.remove("no-puzzle");
     setRail(type, level);
     buildBoard();
@@ -515,6 +523,7 @@ window.Play = (() => {
 
   function erase() {
     if (P && P.ctl === "shading") { mark(sel, 0); return; }
+    if (P && P.ctl === "bridges") { clearIsland(sel); return; }
     if (!editable(sel) || (!P.prog.val[sel] && !P.prog.notes[sel])) return;
     undo.push([snap(sel)]);
     P.prog.val[sel] = 0; P.prog.notes[sel] = 0;
@@ -524,7 +533,10 @@ window.Play = (() => {
   function undoStep() {
     if (!P || P.done) return;
     if (!undo.length) { say("Ei kumottavaa."); return; }
-    for (const s of undo.pop()) { restore(s); sel = s.i; }
+    for (const s of undo.pop()) {
+      if ("e" in s) { P.prog.bridges[s.e] = s.w; continue; }
+      restore(s); sel = s.i;
+    }
     say("");
     afterChange();
   }
@@ -532,6 +544,13 @@ window.Play = (() => {
   /* reports only how many are wrong – finding them is part of the puzzle */
   function check() {
     if (!P || P.done) return;
+    if (P.ctl === "bridges") {
+      /* an edge with more bridges than the solution has */
+      let bad = 0;
+      P.prog.bridges.forEach((w, e) => { if (w > P.item.solution[e]) bad++; });
+      say(bad ? `${bad} ${bad === 1 ? "merkintä on" : "merkintää on"} väärin.` : "Kaikki merkinnät ovat oikein.");
+      return;
+    }
     if (P.ctl === "shading") {
       /* hitori: shaded but white, or circled but shaded; nonogram: filled
          but empty, or crossed but filled */
@@ -626,6 +645,7 @@ window.Play = (() => {
   });
 
   boardEl.addEventListener("pointerdown", e => {
+    if (P && P.ctl === "bridges") { if (!P.done) bridgePointerDown(e); return; }
     const c = e.target.closest(".cell[data-i]");
     if (!c || !P || P.done || !P.open[+c.dataset.i]) return;
     if (P.ctl === "shading") { shadePointerDown(e, +c.dataset.i); return; }
@@ -640,6 +660,7 @@ window.Play = (() => {
     const k = e.key;
     if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === "z") { undoStep(); e.preventDefault(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (P.ctl === "bridges") { bridgeKey(e); return; }
     if (k.startsWith("Arrow")) {
       if (P.done) return;
       /* steps over kakuro black cells; at the edge it stays put */
@@ -686,6 +707,174 @@ window.Play = (() => {
   $("t-erase").addEventListener("click", erase);
   $("t-undo").addEventListener("click", undoStep);
   $("t-check").addEventListener("click", check);
+
+  /* ---------- bridges (hashi) ---------- */
+
+  const DIRS = {ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right"};
+
+  function buildHashi() {
+    const {item, n} = P;
+    P.at = new Int16Array(n * n).fill(-1);
+    item.islands.forEach((p, i) => { P.at[p.r * n + p.c] = i; });
+    P.edgeOf = new Map(item.edges.map((e, k) => [e.a + "," + e.b, k]));
+    /* each island's edge in each direction: "h" edges run right from a,
+       "v" edges down from a */
+    P.dirEdge = item.islands.map(() => ({}));
+    item.edges.forEach((e, k) => {
+      if (e.dir === "h") { P.dirEdge[e.a].right = k; P.dirEdge[e.b].left = k; }
+      else { P.dirEdge[e.a].down = k; P.dirEdge[e.b].up = k; }
+    });
+    P.cross = hashiCrossings(item.edges, n);
+    P.cells = [];
+    playEl.style.setProperty("--span", n);
+    playEl.style.setProperty("--d", 1);
+    playEl.classList.remove("ctl-shading", "ctl-nonogram");
+    padEl.hidden = true;
+    modesEl.hidden = true;
+    $("t-notes").hidden = true;
+    $("play-tools").style.gridTemplateColumns = "repeat(3,1fr)";
+    boardEl.setAttribute("aria-label", "Siltaruudukko. Liiku saarelta toiselle nuolinäppäimillä, Shift ja nuoli lisää sillan.");
+    $("play-keys").innerHTML = `Vedä saarelta naapurisaareen tai napauta kahta saarta peräkkäin: siltoja tulee yksi, sitten kaksi, ` +
+      `sitten ei yhtään. Näppäimistöllä: <kbd>←↑→↓</kbd> siirtyy saarelta toiselle, <kbd>Shift</kbd> + nuoli lisää sillan ` +
+      `siihen suuntaan, <kbd>Del</kbd> poistaa valitun saaren sillat ja <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa.`;
+  }
+
+  const bridgeCounts = () => {
+    const k = P.item.islands.map(() => 0);
+    P.item.edges.forEach((e, j) => { k[e.a] += P.prog.bridges[j]; k[e.b] += P.prog.bridges[j]; });
+    return k;
+  };
+
+  function islandLabel(i, counts = bridgeCounts()) {
+    const p = P.item.islands[i];
+    return `Rivi ${p.r + 1}, sarake ${p.c + 1}: saari ${p.k}, siltoja ${counts[i]}` + (counts[i] === p.k ? ", valmis" : "");
+  }
+
+  /* The paper renderer draws the player's bridges: it is handed them where
+     the solution would go. Islands whose count is met turn muted. */
+  function drawHashi() {
+    const svg = RENDER.hashi(Object.assign({}, P.item, {solution: P.prog.bridges}), true);
+    svg.setAttribute("role", "group");
+    svg.removeAttribute("aria-label");
+    const counts = bridgeCounts(), circles = svg.querySelectorAll(".hisland"), texts = svg.querySelectorAll("text");
+    P.item.islands.forEach((p, i) => {
+      const full = counts[i] === p.k;
+      circles[i].setAttribute("class", "hisland" + (full ? " full" : "") + (i === sel ? " sel" : ""));
+      circles[i].setAttribute("aria-label", islandLabel(i, counts));
+      texts[i].setAttribute("class", full ? "full" : "");
+    });
+    P.svg = svg;
+    boardEl.replaceChildren(svg);
+  }
+
+  /* 0 → 1 → 2 → 0 bridges. A first bridge may not cross one already laid. */
+  function cycleEdge(k) {
+    if (!P || P.done) return false;
+    const w = P.prog.bridges[k];
+    if (w === 0 && P.cross[k].some(j => P.prog.bridges[j])) { say("Silta ei voi ylittää toista siltaa."); return false; }
+    undo.push([{e: k, w}]);
+    P.prog.bridges[k] = (w + 1) % 3;
+    say("");
+    afterChange();
+    return true;
+  }
+
+  function clearIsland(i) {
+    if (!P || P.done || i < 0) return;
+    const changes = [];
+    P.item.edges.forEach((e, k) => {
+      if ((e.a === i || e.b === i) && P.prog.bridges[k]) { changes.push({e: k, w: P.prog.bridges[k]}); P.prog.bridges[k] = 0; }
+    });
+    if (!changes.length) return;
+    undo.push(changes);
+    say("");
+    afterChange();
+  }
+
+  const edgeBetween = (a, b) => {
+    const k = P.edgeOf.get(Math.min(a, b) + "," + Math.max(a, b));
+    return k === undefined ? -1 : k;
+  };
+
+  /* the island under a point, and the point in cell units */
+  function islandAt(x, y) {
+    const rect = P.svg.getBoundingClientRect(), u = rect.width / P.n;
+    const fx = (x - rect.left) / u, fy = (y - rect.top) / u;
+    const c = Math.floor(fx), r = Math.floor(fy);
+    const i = r >= 0 && r < P.n && c >= 0 && c < P.n ? P.at[r * P.n + c] : -1;
+    return {i, fx, fy};
+  }
+
+  function showSel(i) {
+    P.svg.querySelectorAll(".hisland").forEach((c, j) => c.classList.toggle("sel", j === i));
+  }
+
+  function bridgePointerDown(e) {
+    const {i} = islandAt(e.clientX, e.clientY);
+    if (i < 0) return;
+    e.preventDefault();
+    boardEl.focus({preventScroll: true});
+    const p = P.item.islands[i];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("class", "hdrag");
+    line.setAttribute("x1", p.c + 0.5); line.setAttribute("y1", p.r + 0.5);
+    line.setAttribute("x2", p.c + 0.5); line.setAttribute("y2", p.r + 0.5);
+    P.svg.appendChild(line);
+    bridgeDrag = {a: i, prev: sel, line, x0: p.c + 0.5, y0: p.r + 0.5};
+    showSel(i);
+    try { boardEl.setPointerCapture(e.pointerId); } catch {}
+  }
+
+  boardEl.addEventListener("pointermove", e => {
+    if (!bridgeDrag) return;
+    const {fx, fy} = islandAt(e.clientX, e.clientY);
+    bridgeDrag.line.setAttribute("x2", fx); bridgeDrag.line.setAttribute("y2", fy);
+  });
+
+  /* A drag ends on the island it reached, or failing that picks the
+     neighbour in the direction it went. A tap selects an island; a tap on
+     a neighbour of the selected one bridges the two. */
+  function endBridgeDrag(e, cancelled) {
+    const d = bridgeDrag;
+    if (!d) return;
+    bridgeDrag = null;
+    d.line.remove();
+    if (cancelled) { showSel(sel); return; }
+    const {i: b, fx, fy} = islandAt(e.clientX, e.clientY);
+    const dx = fx - d.x0, dy = fy - d.y0, dist = Math.hypot(dx, dy);
+    let k = -1;
+    if (b === d.a || dist < 0.35) {
+      if (d.prev >= 0 && d.prev !== d.a && (k = edgeBetween(d.prev, d.a)) >= 0) sel = -1;
+      else { sel = d.prev === d.a ? -1 : d.a; render(); return; }
+    } else {
+      if (b >= 0) k = edgeBetween(d.a, b);
+      if (k < 0 && dist >= 0.5) {
+        const dir = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+        k = P.dirEdge[d.a][dir] ?? -1;
+      }
+      sel = -1;
+    }
+    if (k < 0 || !cycleEdge(k)) render();
+  }
+  boardEl.addEventListener("pointerup", e => endBridgeDrag(e, false));
+  boardEl.addEventListener("pointercancel", e => endBridgeDrag(e, true));
+  boardEl.addEventListener("lostpointercapture", e => endBridgeDrag(e, true));
+
+  function bridgeKey(e) {
+    const k = e.key, dir = DIRS[k];
+    if (P.done) return;
+    if (dir) {
+      e.preventDefault();
+      if (sel < 0) { sel = 0; render(); srEl.textContent = islandLabel(sel); return; }
+      const edge = P.dirEdge[sel][dir];
+      if (edge === undefined) return;
+      if (e.shiftKey) { if (!cycleEdge(edge)) render(); }
+      else { const ed = P.item.edges[edge]; sel = ed.a === sel ? ed.b : ed.a; render(); }
+      srEl.textContent = islandLabel(sel);
+      return;
+    }
+    if (k === "Backspace" || k === "Delete") { clearIsland(sel); e.preventDefault(); }
+  }
 
   /* ---------- info column ---------- */
 

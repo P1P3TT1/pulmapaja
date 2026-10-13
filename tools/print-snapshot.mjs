@@ -1,7 +1,7 @@
 // Screenshots every printed sheet, to prove a style change leaves print
 // output alone (docs/ui-uudistus.md §9).
 //
-//   node tools/print-snapshot.mjs [--out <dir>] [--compare <dir>] [--types a,b]
+//   node tools/print-snapshot.mjs [--out <dir>] [--compare <dir>] [--types a,b] [--scheme dark]
 //
 // For every type, at level medium, 2 per page, with solutions: opens
 // index.html from disk with a seeded Math.random, generates, and screenshots
@@ -13,6 +13,9 @@
 // the same name in that directory, and each difference is reported. Every run
 // also checks that nothing prints above the first sheet. The exit
 // code is 1 when any sheet differs or is missing on either side.
+//
+// --scheme dark runs it with the system in dark mode, which must not reach
+// paper either: compare that run against the same light baseline.
 //
 // Make the baseline on main first:
 //   node tools/print-snapshot.mjs --out previews/print-main
@@ -35,8 +38,9 @@ const arg = name => { const at = args.indexOf(name); return at >= 0 ? args[at + 
 const out = resolve(ROOT, arg("--out") || "previews/print");
 const compare = arg("--compare") && resolve(ROOT, arg("--compare"));
 const only = arg("--types") ? arg("--types").split(",") : TYPES;
-if (only.some(t => !TYPES.includes(t)) || (compare && !existsSync(compare))) {
-  console.error("usage: node tools/print-snapshot.mjs [--out <dir>] [--compare <dir>] [--types a,b]");
+const scheme = arg("--scheme") || "light";
+if (only.some(t => !TYPES.includes(t)) || (compare && !existsSync(compare)) || !["light", "dark"].includes(scheme)) {
+  console.error("usage: node tools/print-snapshot.mjs [--out <dir>] [--compare <dir>] [--types a,b] [--scheme dark]");
   process.exit(1);
 }
 
@@ -51,7 +55,7 @@ const {chromium} = await loadPlaywright();
 const proxy = process.env.HTTPS_PROXY ? {server: process.env.HTTPS_PROXY} : undefined;
 const browser = await chromium.launch({proxy});
 /* 182 mm, the width of an A4 page inside the @page margins */
-const context = await browser.newContext({viewport: {width: 688, height: 1000}, deviceScaleFactor: 1});
+const context = await browser.newContext({viewport: {width: 688, height: 1000}, deviceScaleFactor: 1, colorScheme: scheme});
 await context.addInitScript(seed => {
   /* mulberry32 */
   let a = seed >>> 0;

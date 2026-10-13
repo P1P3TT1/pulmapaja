@@ -31,6 +31,13 @@
   --red-soft:#F8DEDA;
   --green:#2E7D4F;
   --green-soft:#DCEFE3;
+  /* text on --green-soft, and digits on a highlighted cell: a step darker
+     or lighter where the base colour falls short of 4.5:1 */
+  --green-ink:#2A7349;
+  --blue-hl:#1E5FA8;
+  --red-hl:#B3261E;
+  /* the pressed option of a segmented control */
+  --seg-on:#FFFFFF;
   /* play board; light values of the paper look the print renderers use */
   --board:#FFFFFF;
   --peer:#F2F6FB;
@@ -84,7 +91,7 @@ input:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-vis
 .seg button{flex:1;min-width:0;appearance:none;border:0;border-radius:var(--r-pill);background:transparent;font-family:var(--display);
   font-size:14px;font-weight:500;color:var(--ink);min-height:38px;padding:0 10px;cursor:pointer;transition:background .12s,box-shadow .12s}
 .seg button:hover{background:var(--hover)}
-.seg button[aria-pressed="true"]{background:var(--surface);box-shadow:var(--shadow-1);font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--seg-on);box-shadow:var(--shadow-1);font-weight:600}
 
 .stepper{display:flex;align-items:stretch;background:var(--surface-2);border:1px solid var(--grid-thin);border-radius:var(--r-sm);overflow:hidden}
 .stepper button{width:46px;border:0;background:transparent;font-family:var(--mono);font-size:18px;color:var(--ink);cursor:pointer}
@@ -121,7 +128,7 @@ input:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-vis
 /* chips: level, status and percentage */
 .chip{display:inline-flex;align-items:center;gap:4px;flex:none;font-family:var(--display);font-size:12px;font-weight:600;line-height:1.35;
   padding:2px 9px;border-radius:var(--r-pill);background:var(--fill);color:var(--ink-soft);white-space:nowrap}
-.chip.green{background:var(--green-soft);color:var(--green)}
+.chip.green{background:var(--green-soft);color:var(--green-ink)}
 .chip.blue{background:var(--blue-soft);color:var(--blue)}
 
 /* progress ring: the percentage in the middle, a tick when solved */
@@ -286,26 +293,32 @@ input:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-vis
    body.playing, so printed sheets look exactly as before.
    ============================================================ */
 
-/* dark theme, play mode only: printed sheets stay paper white */
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body.playing{
+/* Dark theme, the whole app (docs/ui-uudistus.md §2.2). Printed sheets and
+   their previews use literal colours, so they stay paper white. Shadows
+   barely show on dark, so the layers part by --surface against --bg. */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#10161C; --surface:#19212A; --surface-2:#1E2730; --fill:#232D37; --fill-strong:#2C3742; --hover:rgba(255,255,255,.06);
-  --board:#1E2730; --on-accent:#1E2730; --mark-off:#3A5577;
+  --board:#1E2730; --on-accent:#1E2730; --mark-off:#3A5577; --seg-on:#405063;
   --ink:#E4EAEE; --ink-soft:#93A1AB; --line:#46535E; --hair:#2C3742; --rule-soft:#2C3742;
   --blue:#78A9E3; --blue-soft:#22364E; --peer:#222D38; --same:#2C4460; --selbg:#36547A;
   --red:#F08A80; --red-soft:#4A2522; --green:#7CCB9A; --green-soft:#1E3A2A;
+  --green-ink:#7CCB9A; --blue-hl:#B4D2F5; --red-hl:#FFBDB5;
   --grid-thin:#33404B; --grid-thick:#C9D3DA; --diag:#26313B; --clue-cell:#34424F;
   --dot-black:#05080B; --dot-white:#E4EAEE; --dot-ring:#93A1AB;
-  --shadow-1:none; --shadow-2:none; --shadow-3:0 18px 48px rgba(0,0,0,.5);
+  --shadow-1:none; --shadow-2:none; --shadow-3:0 18px 48px rgba(0,0,0,.5); --shadow-blue:none;
+  --scrim:rgba(0,0,0,.55);
   color-scheme:dark}}
-:root[data-theme="dark"] body.playing{
+:root[data-theme="dark"]{
   --bg:#10161C; --surface:#19212A; --surface-2:#1E2730; --fill:#232D37; --fill-strong:#2C3742; --hover:rgba(255,255,255,.06);
-  --board:#1E2730; --on-accent:#1E2730; --mark-off:#3A5577;
+  --board:#1E2730; --on-accent:#1E2730; --mark-off:#3A5577; --seg-on:#405063;
   --ink:#E4EAEE; --ink-soft:#93A1AB; --line:#46535E; --hair:#2C3742; --rule-soft:#2C3742;
   --blue:#78A9E3; --blue-soft:#22364E; --peer:#222D38; --same:#2C4460; --selbg:#36547A;
   --red:#F08A80; --red-soft:#4A2522; --green:#7CCB9A; --green-soft:#1E3A2A;
+  --green-ink:#7CCB9A; --blue-hl:#B4D2F5; --red-hl:#FFBDB5;
   --grid-thin:#33404B; --grid-thick:#C9D3DA; --diag:#26313B; --clue-cell:#34424F;
   --dot-black:#05080B; --dot-white:#E4EAEE; --dot-ring:#93A1AB;
-  --shadow-1:none; --shadow-2:none; --shadow-3:0 18px 48px rgba(0,0,0,.5);
+  --shadow-1:none; --shadow-2:none; --shadow-3:0 18px 48px rgba(0,0,0,.5); --shadow-blue:none;
+  --scrim:rgba(0,0,0,.55);
   color-scheme:dark}
 
 /* ---- the board (§4) ---- */
@@ -369,6 +382,11 @@ input:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-vis
 .play-board .cell.same{background:var(--same)}
 .play-board .cell.sel{background:var(--selbg);box-shadow:inset 0 0 0 2px var(--blue)}
 .play-board .cell.clash{color:var(--red)}
+/* on a highlighted cell the digits and notes step up to keep 4.5:1 */
+.play-board .cell:is(.sel,.same).user{color:var(--blue-hl)}
+.play-board .cell:is(.sel,.same).clash{color:var(--red-hl)}
+.play-board .cell:is(.sel,.same) .notes{color:var(--ink)}
+.play-board .cell:is(.sel,.same) .notes span.hit{color:var(--blue-hl)}
 /* shading marks come after the highlights, so a filled cell stays filled
    when its row is highlighted; the selection then shows as a ring */
 .play-board .cell.mk-fill,.play-board .cell.mk-shade{background:var(--ink)}
@@ -397,9 +415,10 @@ body:not(.playing) .play-only{display:none!important}
 .title-pill{flex:1;min-width:0;height:48px;display:flex;align-items:center;gap:8px;padding:0 12px 0 8px;appearance:none;border:0;
   border-radius:var(--r-pill);background:var(--surface);box-shadow:var(--shadow-1);color:var(--ink);font-family:var(--display);cursor:pointer;text-align:left}
 .title-pill:hover{background:var(--surface-2)}
-.tp-mark{width:32px;height:32px;flex:none;border-radius:var(--r-pill);background:var(--blue-soft);display:flex;align-items:center;justify-content:center}
+.tp-mark{width:30px;height:30px;flex:none;border-radius:var(--r-pill);background:var(--blue-soft);display:flex;align-items:center;justify-content:center}
 .tp-mark .mark{width:16px;height:16px;gap:1.1px}
 .tp-name{min-width:0;font-size:16px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.title-pill .chip{padding:2px 8px}
 .title-pill .chip:empty{display:none}
 .tp-chev{flex:none;margin-left:auto;color:var(--ink-soft)}
 
@@ -421,7 +440,7 @@ body:not(.playing) .play-only{display:none!important}
 .clock:hover{background:var(--hair)}
 .clock .i-play,.clock.is-paused .i-pause{display:none}
 .clock.is-paused .i-play{display:block}
-.clock.done{cursor:default;background:transparent;padding:0 4px;color:var(--green)}
+.clock.done{cursor:default;background:transparent;padding:0 4px;color:var(--green-ink)}
 .pill{grid-area:rules;justify-self:end;align-self:center;appearance:none;border:0;height:32px;padding:0 12px;border-radius:var(--r-pill);
   background:var(--fill-strong);color:var(--ink);font-family:var(--display);font-size:13px;font-weight:500;
   display:inline-flex;align-items:center;gap:6px;cursor:pointer}
@@ -431,7 +450,7 @@ body:not(.playing) .play-only{display:none!important}
 .play-status{grid-area:status;margin:0;min-height:1.4em;font-size:12.5px;line-height:1.4;color:var(--ink-soft);text-align:center}
 /* the done banner replaces the status line; the line stays for screen readers */
 .play.is-done .play-status{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.done-banner{grid-area:status;justify-self:center;background:var(--green-soft);color:var(--green);font-weight:600;font-size:14px;
+.done-banner{grid-area:status;justify-self:center;background:var(--green-soft);color:var(--green-ink);font-weight:600;font-size:14px;
   padding:9px 16px;text-align:center;border-radius:var(--r-pill)}
 
 .play-empty{display:none;padding:56px 24px;text-align:center;color:var(--ink-soft);font-size:14.5px;max-width:360px}
@@ -478,6 +497,7 @@ body:not(.playing) .play-only{display:none!important}
   .topbar{padding:2px 2px 14px}
   .rail{position:static;padding:22px 18px 20px}
   .bar-gap,body.playing .brand,.bar-new{display:none}
+  .bar-btn{width:44px;height:44px}
 
   body.playing{height:100vh;height:100dvh;overflow:hidden}
   body.playing .app{height:100vh;height:100dvh;display:flex;flex-direction:column;padding:0}
@@ -622,7 +642,7 @@ body:not(.playing) .play-only{display:none!important}
 .action .sub{font-size:13px;line-height:1.4;color:var(--ink-soft)}
 .action.primary .sub{color:inherit;opacity:.88}
 .saved-pill{align-self:center;display:flex;align-items:center;gap:7px;margin:2px 0 0;padding:7px 14px;border-radius:var(--r-pill);
-  background:var(--green-soft);color:var(--green);font-size:12.5px;font-weight:500;text-align:center}
+  background:var(--green-soft);color:var(--green-ink);font-size:12.5px;font-weight:500;text-align:center}
 .codes{background:var(--surface-2);border-radius:20px;padding:4px 16px}
 .disclosure{appearance:none;border:0;background:transparent;width:100%;min-height:48px;padding:0;display:flex;align-items:center;
   justify-content:space-between;font-family:var(--display);font-size:14px;font-weight:500;color:var(--ink);cursor:pointer}

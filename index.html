@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pulmapaja</title>
     <meta name="description" content="Tulostusvalmiita ja ruudulla ratkaistavia päättelypulmia.">
-    <meta name="theme-color" content="#E4E8E2">
+    <meta name="theme-color" content="#EEF1F4" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#10161C" media="(prefers-color-scheme: dark)">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -15,7 +16,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles/styles.css">
     <script src="scripts/generators.js" defer></script>
     <script src="scripts/codec.js" defer></script>
@@ -27,14 +28,42 @@
   </head>
   <body>
     <div class="app">
-      <aside class="rail">
+      <!-- The top bar. On a phone in play mode it holds the title pill, Jaa
+           and the menu; on wide screens also the brand and Käyttötapa, which
+           move here from the rail (script.js placeControls). -->
+      <header class="topbar" id="topbar">
         <h1 class="brand">
           <span class="mark" aria-hidden="true"><i></i><i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i><i></i></span>
           Pulmapaja
         </h1>
+        <div class="bar-slot" id="slot-mode"></div>
+        <button type="button" class="title-pill play-only" id="title-pill" aria-haspopup="dialog">
+          <span class="tp-mark" aria-hidden="true"><span class="mark"><i></i><i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i><i></i></span></span>
+          <span class="tp-name" id="play-name">Sudoku 9 × 9</span>
+          <span class="chip green" id="play-tag"></span>
+          <svg class="tp-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <button type="button" class="btn bar-new play-only" id="new-btn" aria-haspopup="dialog">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          Uusi tehtävä
+        </button>
+        <span class="bar-gap"></span>
+        <button type="button" class="bar-btn play-only" id="share-btn" aria-label="Jaa" aria-haspopup="dialog" aria-expanded="false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13"/><path d="M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>
+          <span class="bar-lbl" aria-hidden="true">Jaa</span>
+        </button>
+        <button type="button" class="bar-btn play-only" id="menu-btn" aria-label="Omat tehtävät" aria-haspopup="dialog" aria-expanded="false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>
+          <span class="bar-lbl" aria-hidden="true">Omat tehtävät</span>
+        </button>
+      </header>
+
+      <!-- The rail: one set of controls. Play mode moves the fields marked
+           in placeControls into the Uusi tehtävä overlay and back. -->
+      <aside class="rail" id="rail">
         <p class="lede">Tee tulostusvalmiita pulmatehtäviä. Jokaisella on täsmälleen yksi ratkaisu, ja se löytyy päättelemällä.</p>
 
-        <div class="field">
+        <div class="field" id="field-mode">
           <span class="label" id="lbl-tapa">Käyttötapa</span>
           <div class="seg" role="group" aria-labelledby="lbl-tapa" id="seg-mode">
             <button type="button" data-value="print" aria-pressed="true">Tulosta</button>
@@ -42,26 +71,17 @@
           </div>
         </div>
 
-        <div class="field">
-          <label for="type">Pulmatyyppi</label>
-          <select id="type">
-            <optgroup label="Sudokut">
-              <option value="sudoku9">Sudoku 9 × 9</option>
-              <option value="sudoku6">Sudoku 6 × 6</option>
-              <option value="diagonal">Diagonaalisudoku</option>
-              <option value="jigsaw">Palapelisudoku</option>
-              <option value="kropki">Kropki-sudoku</option>
-              <option value="killer">Killer-sudoku</option>
-            </optgroup>
-            <optgroup label="Muut päättelypulmat">
-              <option value="futoshiki">Futoshiki</option>
-              <option value="skyscrapers">Pilvenpiirtäjät</option>
-              <option value="kakuro">Kakuro</option>
-              <option value="hitori">Hitori</option>
-              <option value="hashi">Sillat</option>
-              <option value="nonogram">Nonogrammi</option>
-            </optgroup>
-          </select>
+        <!-- the select stays the source of truth, out of sight; the row opens
+             the type picker (script.js Picker), which sets it -->
+        <div class="field" id="field-type">
+          <select id="type" tabindex="-1" aria-hidden="true"></select>
+          <button type="button" class="type-row" id="type-row" aria-haspopup="dialog">
+            <span class="ti" id="type-row-icon" aria-hidden="true"></span>
+            <span class="tr-txt"><span class="tr-lbl">Pulmatyyppi</span><span class="tr-name" id="type-row-name"></span></span>
+            <span class="tr-go" aria-hidden="true">Vaihda
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
         </div>
 
         <div class="field" id="src-wrap" hidden>
@@ -131,14 +151,24 @@
           <input type="text" id="title" value="" placeholder="Pulmatyypin nimi" maxlength="60">
         </div>
 
-        <div class="field">
+        <div class="field" id="field-opts">
           <span class="label">Asetukset</span>
           <label class="check" id="sol-wrap"><input type="checkbox" id="opt-solutions" checked> Liitä ratkaisut loppuun</label>
-          <label class="check" id="sym-wrap"><input type="checkbox" id="opt-symmetry" checked> Symmetrinen ruudukko</label>
+          <!-- a checkbox in the rail, a switch in Uusi tehtävä; the checkbox
+               stays the source of truth in both -->
+          <div class="opt" id="sym-wrap">
+            <label class="check"><input type="checkbox" id="opt-symmetry" checked> Symmetrinen ruudukko</label>
+            <button type="button" class="switch" role="switch" aria-checked="true" id="sym-switch">
+              <span>Symmetrinen ruudukko</span><i aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
 
         <div class="actions">
-          <button type="button" class="btn" id="generate">Luo tehtävät</button>
+          <button type="button" class="btn" id="generate">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            <span id="generate-label">Luo tehtävät</span>
+          </button>
           <button type="button" class="btn ghost" id="print" disabled>Tulosta</button>
         </div>
 
@@ -151,65 +181,191 @@
         <div class="empty" id="empty">Valitse pulmatyyppi ja vaikeustaso, niin tehtävät ilmestyvät tähän.</div>
       </main>
 
-      <div class="play" id="play" hidden>
-        <section class="play-panel" aria-labelledby="play-name">
-          <div class="play-col">
-            <div class="play-head">
-              <h2 id="play-name">Sudoku 9 × 9</h2>
-              <span class="tag" id="play-tag"></span>
-              <span class="clock" id="play-clock" aria-label="Käytetty aika">0:00</span>
+      <!-- Play mode. On a phone: the stage takes the screen between the top
+           bar and the dock. On wide screens the dock is a side column. -->
+      <main class="play no-puzzle" id="play" hidden>
+        <section class="stage" id="play-stage" aria-label="Pulma">
+          <button type="button" class="clock" id="play-clock" aria-label="Tauko, käytetty aika 0:00">
+            <svg class="i-pause" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
+            <svg class="i-play" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.4-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z"/></svg>
+            <span id="play-time">0:00</span>
+          </button>
+          <span class="clock done" id="play-clock-done" hidden></span>
+          <button type="button" class="pill" id="rules-btn" aria-haspopup="dialog">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.5v.5"/></svg>
+            Säännöt
+          </button>
+          <div class="board-fit" id="board-fit">
+            <div class="board-card" id="board-card">
+              <div class="play-board" id="play-board" tabindex="0" role="group"
+                   aria-label="Ruudukko. Liiku nuolinäppäimillä ja kirjoita numero."></div>
+              <div class="paused" id="play-paused" hidden>
+                <h2>Tauko</h2>
+                <p>Ruudukko on piilossa tauon ajan.</p>
+                <button type="button" class="btn" id="resume-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.4-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z"/></svg>
+                  Jatka
+                </button>
+              </div>
+              <div class="play-empty" id="play-empty">Valitse pulmatyyppi ja vaikeustaso ja luo tehtävä.</div>
             </div>
-            <div class="play-board" id="play-board" tabindex="0" role="group"
-                 aria-label="Ruudukko. Liiku nuolinäppäimillä ja kirjoita numero."></div>
-            <div class="play-empty" id="play-empty">Valitse pulmatyyppi ja vaikeustaso ja luo tehtävä.</div>
-            <div class="done-banner" id="play-done" hidden></div>
-            <div class="pad" id="play-pad" role="group" aria-label="Numerot"></div>
+          </div>
+          <p class="play-status" id="play-status" role="status" aria-live="polite"></p>
+          <div class="done-banner" id="play-done" hidden></div>
+        </section>
+
+        <section class="dock" id="play-dock" aria-label="Merkinnät">
+          <div class="dock-card">
             <div class="seg modes" id="play-modes" role="group" aria-label="Merkintätapa" hidden>
               <button type="button" data-mode="fill" aria-pressed="true">Väritä</button>
               <button type="button" data-mode="x" aria-pressed="false">Rasti</button>
             </div>
             <div class="tools" id="play-tools">
-              <button type="button" id="t-notes" aria-pressed="false">Muistiin&shy;panot</button>
-              <button type="button" id="t-erase">Pyyhi</button>
-              <button type="button" id="t-undo">Kumoa</button>
-              <button type="button" id="t-check">Tarkista</button>
+              <button type="button" id="t-notes" aria-pressed="false">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>
+                <span>Muistiin&shy;panot</span>
+              </button>
+              <button type="button" id="t-erase">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20H9L4 15a2 2 0 0 1 0-2.8L12.2 4a2 2 0 0 1 2.8 0l5 5a2 2 0 0 1 0 2.8L12 20"/><path d="M8.5 9.5l6 6"/></svg>
+                <span>Pyyhi</span>
+              </button>
+              <button type="button" id="t-undo">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+                <span>Kumoa</span>
+              </button>
+              <button type="button" id="t-check">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.8 2.7L16 9.5"/></svg>
+                <span>Tarkista</span>
+              </button>
             </div>
-            <p class="play-status" id="play-status" role="status" aria-live="polite"></p>
-            <p class="keys" id="play-keys"></p>
-            <p class="sr" id="play-sr" aria-live="polite"></p>
+            <div class="pad" id="play-pad" role="group" aria-label="Numerot"></div>
           </div>
+          <section class="rules-card" aria-labelledby="h-rules-card">
+            <h2 class="label" id="h-rules-card">Säännöt</h2>
+            <p id="play-rules"></p>
+          </section>
+          <p class="keys" id="play-keys"></p>
+          <p class="sr" id="play-sr" aria-live="polite"></p>
         </section>
-
-        <aside class="play-info">
-          <section class="sec" aria-labelledby="h-share">
-            <span class="label" id="h-share">Jaa ja jatka</span>
-            <div class="code">
-              <div class="code-head"><strong>Tehtävä</strong><span id="len-a"></span></div>
-              <p class="note">Ystävä saa saman tehtävän tyhjänä.</p>
-              <textarea id="code-a" rows="3" readonly aria-label="Tehtävän koodi"></textarea>
-              <div class="row"><button type="button" class="btn ghost small" data-copy="code-a">Kopioi</button></div>
-            </div>
-            <div class="code">
-              <div class="code-head"><strong>Tehtävä ja edistyminen</strong><span id="len-b"></span></div>
-              <p class="note">Jatka toisella laitteella siitä, mihin jäit. Koodi päivittyy jokaisen siirron jälkeen.</p>
-              <textarea id="code-b" rows="4" readonly aria-label="Tehtävän ja edistymisen koodi"></textarea>
-              <div class="row"><button type="button" class="btn ghost small" data-copy="code-b">Kopioi</button></div>
-            </div>
-          </section>
-
-          <section class="sec" aria-labelledby="h-open">
-            <label class="label" id="h-open" for="open-in">Avaa koodilla</label>
-            <textarea id="open-in" rows="3" placeholder="Liitä koodi tai koko linkki"></textarea>
-            <div class="row"><button type="button" class="btn ghost small" id="open-btn">Avaa tehtävä</button></div>
-            <p class="err" id="open-err" role="alert"></p>
-          </section>
-
-          <section class="sec" aria-labelledby="h-saved">
-            <span class="label" id="h-saved">Tallennetut tässä selaimessa</span>
-            <ul class="saved" id="saved"></ul>
-          </section>
-        </aside>
-      </div>
+      </main>
     </div>
+
+    <!-- Overlays: modal dialogs. Bottom sheets on a phone; on wide screens
+         Jaa ja jatka and Omat tehtävät are popovers under their buttons, the
+         others centred dialogs (script.js Overlay). -->
+    <dialog class="overlay" id="ov-new" aria-labelledby="ov-new-h">
+      <div class="ov-grab" aria-hidden="true"></div>
+      <header class="ov-head">
+        <h2 id="ov-new-h" tabindex="-1" autofocus>Uusi tehtävä</h2>
+        <button type="button" class="icon-btn sm" data-close aria-label="Sulje"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+      </header>
+      <div class="ov-body" id="ov-new-body">
+        <p class="note ov-foot">Nykyisen tehtävän edistyminen on tallessa Omissa tehtävissä.</p>
+      </div>
+    </dialog>
+
+    <dialog class="overlay pop" id="ov-share" aria-labelledby="ov-share-h">
+      <div class="ov-grab" aria-hidden="true"></div>
+      <header class="ov-head">
+        <h2 id="ov-share-h" tabindex="-1" autofocus>Jaa ja jatka</h2>
+        <button type="button" class="icon-btn sm" data-close aria-label="Sulje"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+      </header>
+      <div class="ov-body" id="share-main">
+        <button type="button" class="action primary" id="share-link">
+          <span class="badge" id="share-link-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></span>
+          <span class="txt"><strong id="share-link-t">Jaa tehtävä</strong><span class="sub" id="share-link-n">Ystävä saa saman tehtävän tyhjänä.</span></span>
+        </button>
+        <button type="button" class="action" id="share-prog">
+          <span class="badge blue" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></span>
+          <span class="txt"><strong>Jatka toisella laitteella</strong><span class="sub" id="share-prog-n">Linkki vie mukanaan edistymisesi.</span></span>
+          <span class="chip blue" id="share-pct"></span>
+        </button>
+        <button type="button" class="action" id="share-qr">
+          <span class="badge" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.5"/><path d="M14 14h2.5v2.5"/><path d="M20.5 14v.01"/><path d="M14 20.5h.01"/><path d="M18 18h2.5v2.5H18z"/></svg></span>
+          <span class="txt"><strong>Näytä QR-koodi</strong><span class="sub">Skannaa tehtävä toisella puhelimella.</span></span>
+        </button>
+        <p class="saved-pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg> Edistyminen tallentuu automaattisesti.</p>
+        <div class="codes">
+          <button type="button" class="disclosure" id="codes-toggle" aria-expanded="false" aria-controls="codes-body">
+            <span>Näytä koodit</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="codes-body" id="codes-body" hidden>
+            <div class="code">
+              <div class="code-head"><strong id="lbl-code-a">Tehtävä</strong><span id="len-a"></span></div>
+              <div class="code-row">
+                <textarea id="code-a" rows="3" readonly aria-labelledby="lbl-code-a"></textarea>
+                <button type="button" class="copy-btn" data-copy="code-a" data-len="len-a" aria-label="Kopioi tehtävän koodi"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button>
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-head"><strong id="lbl-code-b">Tehtävä ja edistyminen</strong><span id="len-b"></span></div>
+              <div class="code-row">
+                <textarea id="code-b" rows="4" readonly aria-labelledby="lbl-code-b"></textarea>
+                <button type="button" class="copy-btn" data-copy="code-b" data-len="len-b" aria-label="Kopioi tehtävän ja edistymisen koodi"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ov-body qr-view" id="share-qrview" hidden>
+        <div class="qr-big" id="qr-big" role="img" aria-label="QR-koodi tehtävään"></div>
+        <p class="note">Skannaa tehtävä toisella puhelimella.</p>
+        <button type="button" class="btn ghost" id="qr-back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+          Takaisin
+        </button>
+      </div>
+    </dialog>
+
+    <dialog class="overlay pop on-bg" id="ov-mine" aria-labelledby="ov-mine-h">
+      <div class="ov-grab" aria-hidden="true"></div>
+      <header class="ov-head">
+        <h2 id="ov-mine-h" tabindex="-1" autofocus>Omat tehtävät</h2>
+        <button type="button" class="icon-btn sm" data-close aria-label="Sulje"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+      </header>
+      <div class="ov-body">
+        <h3 class="label" id="h-saved">Tallennetut tässä selaimessa</h3>
+        <ul class="list saved" id="saved" aria-labelledby="h-saved"></ul>
+        <h3 class="label"><label for="open-in" id="h-open">Avaa koodilla</label></h3>
+        <div class="open-card">
+          <textarea id="open-in" rows="2" placeholder="Liitä koodi tai koko linkki"></textarea>
+          <div class="row">
+            <button type="button" class="btn ghost" id="paste-btn" hidden>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="4" width="10" height="17" rx="2"/><path d="M9.5 4V3h5v1"/></svg>
+              Liitä
+            </button>
+            <button type="button" class="btn" id="open-btn">Avaa tehtävä</button>
+          </div>
+          <p class="err" id="open-err" role="alert"></p>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="overlay tall" id="ov-types" aria-labelledby="ov-types-h">
+      <div class="ov-grab" aria-hidden="true"></div>
+      <header class="ov-head">
+        <button type="button" class="icon-btn back" id="types-back" data-close aria-label="Takaisin"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <h2 id="ov-types-h" tabindex="-1" autofocus>Pulmatyyppi</h2>
+        <button type="button" class="icon-btn sm" id="types-close" data-close aria-label="Sulje"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+      </header>
+      <div class="ov-body" id="types-body">
+        <section class="recent" id="types-recent" aria-labelledby="h-recent">
+          <h3 class="label" id="h-recent">Viimeksi käytetyt</h3>
+          <div class="rpills" id="types-recent-list"></div>
+        </section>
+      </div>
+    </dialog>
+
+    <dialog class="overlay" id="ov-rules" aria-labelledby="ov-rules-h">
+      <div class="ov-grab" aria-hidden="true"></div>
+      <header class="ov-head">
+        <h2 id="ov-rules-h" tabindex="-1" autofocus>Säännöt</h2>
+        <button type="button" class="icon-btn sm" data-close aria-label="Sulje"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+      </header>
+      <div class="ov-body">
+        <p class="rules-text" id="rules-text"></p>
+      </div>
+    </dialog>
   </body>
 </html>

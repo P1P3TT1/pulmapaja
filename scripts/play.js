@@ -309,37 +309,54 @@ window.Play = (() => {
     for (const [id, r] of rows) {
       const cur = P && id === P.id;
       const total = Math.max(1, +r.total || 1), filled = Math.min(total, Math.max(0, +r.filled || 0));
+      const level = LEVEL_LABEL[r.level] || (r.level === "none" ? "oma kuva" : "");
       const li = document.createElement("li");
+      li.appendChild(ring(r.done ? 100 : Math.round(filled / total * 100), !!r.done));
       const what = document.createElement("span");
       what.className = "what";
-      what.textContent = TYPES[r.type].name +
-        (LEVEL_LABEL[r.level] ? " · " + LEVEL_LABEL[r.level] : r.level === "none" ? " · oma kuva" : "");
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = TYPES[r.type].name;
       if (cur || r.done) {
-        const em = document.createElement("em");
-        em.textContent = cur ? "auki" : "ratkaistu";
-        if (cur) em.className = "cur";
-        what.appendChild(em);
+        const chip = document.createElement("span");
+        chip.className = "chip " + (cur ? "blue" : "green");
+        chip.textContent = cur ? "Auki" : "Ratkaistu";
+        name.appendChild(chip);
       }
-      const acts = document.createElement("span");
-      acts.className = "acts";
-      const btn = (text, attr, label) => {
-        const b = document.createElement("button");
-        b.type = "button"; b.className = "btn ghost small"; b.textContent = text;
-        b.dataset[attr] = id;
-        if (label) b.setAttribute("aria-label", label);
-        acts.appendChild(b);
-      };
-      if (!cur) btn("Avaa", "open", `Avaa ${what.textContent}`);
-      btn("Poista", "del", "Poista tallennus");
-      const bar = document.createElement("span");
-      bar.className = "bar";
-      bar.innerHTML = `<i style="width:${Math.round(filled / total * 100)}%"></i>`;
+      /* the time it took or is taking; when it was last played otherwise */
       const meta = document.createElement("span");
       meta.className = "meta";
-      meta.textContent = `${filled}/${total} · ${fmtTime(+r.elapsed || 0)} · ${ago(+r.updated || Date.now())}`;
-      li.append(what, acts, bar, meta);
+      meta.textContent = [level && level[0].toUpperCase() + level.slice(1),
+        cur || r.done ? fmtTime(+r.elapsed || 0) : ago(+r.updated || Date.now())].filter(Boolean).join(" · ");
+      what.append(name, meta);
+      const acts = document.createElement("span");
+      acts.className = "acts";
+      const btn = (attr, label, icon) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "icon-btn sm";
+        b.dataset[attr] = id;
+        b.setAttribute("aria-label", label);
+        b.innerHTML = icon;
+        acts.appendChild(b);
+      };
+      const title = TYPES[r.type].name + (level ? ", " + level : "");
+      btn("del", `Poista ${title}`, ICON.trash);
+      if (!cur) btn("open", `Avaa ${title}`, ICON.chevron);
+      li.append(what, acts);
       ul.appendChild(li);
     }
+  }
+
+  /* the progress ring of a saved puzzle (§3): a tick once solved */
+  function ring(pct, done) {
+    const C = 2 * Math.PI * 16;
+    const s = document.createElement("span");
+    s.className = "ring" + (done ? " done" : "");
+    s.setAttribute("aria-hidden", "true");
+    s.innerHTML = `<svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16"/>` +
+      (pct > 0 ? `<circle class="arc" cx="20" cy="20" r="16" stroke-dasharray="${(C * pct / 100).toFixed(1)} ${C.toFixed(1)}"/>` : "") +
+      `</svg><b>${done ? "✓" : pct}</b>`;
+    return s;
   }
 
   function afterChange() {

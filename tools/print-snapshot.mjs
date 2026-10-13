@@ -10,7 +10,8 @@
 // the same puzzles on every run, whatever the code around it.
 //
 // With --compare, every sheet is checked pixel by pixel against the PNG of
-// the same name in that directory, and each difference is reported. The exit
+// the same name in that directory, and each difference is reported. Every run
+// also checks that nothing prints above the first sheet. The exit
 // code is 1 when any sheet differs or is missing on either side.
 //
 // Make the baseline on main first:
@@ -68,6 +69,7 @@ mkdirSync(out, {recursive: true});
 const page = await context.newPage();
 const url = pathToFileURL(join(ROOT, "index.html")).href;
 const written = [];
+let bad = 0;
 
 for (const type of only) {
   const t0 = Date.now();
@@ -84,6 +86,9 @@ for (const type of only) {
   }, type);
   await page.emulateMedia({media: "print"});
   await page.evaluate(() => document.fonts.ready);
+  /* nothing but the sheets may print: the first one starts the page */
+  const top = await page.evaluate(() => document.querySelector(".sheet").getBoundingClientRect().top + scrollY);
+  if (top !== 0) { console.log(`DIFF  ${type}: something prints above the first sheet (${top} px)`); bad++; }
   const sheets = page.locator(".sheet");
   const n = await sheets.count();
   for (let i = 0; i < n; i++) {
@@ -94,7 +99,6 @@ for (const type of only) {
   console.log(`${type.padEnd(12)} ${n} sheets  (${Date.now() - t0} ms)`);
 }
 
-let bad = 0;
 if (compare) {
   /* both PNGs decoded by the browser and compared pixel by pixel */
   const diff = async (a, b) => page.evaluate(async ([a, b]) => {
@@ -128,8 +132,7 @@ if (compare) {
     if (why) { console.log(`DIFF  ${f}: ${why}`); bad++; }
   }
   for (const f of base) { console.log(`DIFF  ${f}: missing from this run`); bad++; }
-  console.log(bad ? `${bad} of ${written.length} sheets differ from ${compare}` :
-    `all ${written.length} sheets match ${compare}`);
+  console.log(bad ? `${bad} differences from ${compare}` : `all ${written.length} sheets match ${compare}`);
 }
 
 await browser.close();

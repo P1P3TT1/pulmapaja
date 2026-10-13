@@ -529,6 +529,17 @@ const RENDER = {sudoku: renderSudoku, kropki: renderKropki, killer: renderKiller
    ============================================================ */
 
 const el = id => document.getElementById(id);
+
+/* Inline icons for buttons built in script: 24 × 24, stroked in the text
+   colour. Icons in the markup are written out there. */
+const svgIcon = (body, w = 2) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+  `stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const ICON = {
+  chevron: svgIcon('<path d="M9 6l6 6-6 6"/>', 2.4),
+  trash: svgIcon('<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/>'),
+  copy: svgIcon('<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>'),
+  tick: svgIcon('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 2.8)
+};
 /* mode is "print" (sheets to print) or "play" (one puzzle solved on screen,
    see play.js) */
 const state = {mode: "print", type: "sudoku9", source: "random", level: "easy", layout: 2, count: 4};

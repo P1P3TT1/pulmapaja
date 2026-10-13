@@ -141,9 +141,9 @@ window.Play = (() => {
       $("play-keys").innerHTML = ngram
         ? `Vedä rivin tai sarakkeen yli, niin merkitset monta ruutua kerralla. Napauta reunan lukua, niin se yliviivataan. ` +
           `Näppäimistöllä: <kbd>←↑→↓</kbd> liikkuu, <kbd>Välilyönti</kbd> värittää, <kbd>X</kbd> merkitsee rastin, ` +
-          `<kbd>Del</kbd> tyhjentää ja <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa.`
+          `<kbd>Del</kbd> tyhjentää, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.`
         : `Napauta ruutua: tyhjä, väritetty, ympyröity. Näppäimistöllä: <kbd>←↑→↓</kbd> liikkuu, ` +
-          `<kbd>Välilyönti</kbd> vaihtaa ruudun tilaa, <kbd>Del</kbd> tyhjentää ja <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa.`;
+          `<kbd>Välilyönti</kbd> vaihtaa ruudun tilaa, <kbd>Del</kbd> tyhjentää, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.`;
       return;
     }
 
@@ -157,7 +157,7 @@ window.Play = (() => {
     }
     $("play-keys").innerHTML = `Näppäimistöllä: <kbd>←↑→↓</kbd> liikkuu, <kbd>1</kbd>–<kbd>${P.d}</kbd> kirjoittaa, ` +
       `<kbd>Shift</kbd> + numero tekee muistiinpanon, <kbd>N</kbd> vaihtaa muistiinpanotilan, ` +
-      `<kbd>Del</kbd> pyyhkii ja <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa.`;
+      `<kbd>Del</kbd> pyyhkii, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.`;
   }
 
   function clashes(i) {
@@ -771,7 +771,7 @@ window.Play = (() => {
     boardEl.setAttribute("aria-label", "Siltaruudukko. Liiku saarelta toiselle nuolinäppäimillä, Shift ja nuoli lisää sillan.");
     $("play-keys").innerHTML = `Vedä saarelta naapurisaareen tai napauta kahta saarta peräkkäin: siltoja tulee yksi, sitten kaksi, ` +
       `sitten ei yhtään. Näppäimistöllä: <kbd>←↑→↓</kbd> siirtyy saarelta toiselle, <kbd>Shift</kbd> + nuoli lisää sillan ` +
-      `siihen suuntaan, <kbd>Del</kbd> poistaa valitun saaren sillat ja <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa.`;
+      `siihen suuntaan, <kbd>Del</kbd> poistaa valitun saaren sillat, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.`;
   }
 
   const bridgeCounts = () => {

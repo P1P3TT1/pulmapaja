@@ -544,6 +544,94 @@ const ICON = {
    see play.js) */
 const state = {mode: "print", type: "sudoku9", source: "random", level: "easy", layout: 2, count: 4};
 
+/* Below 700 px the play view fills the screen and every overlay is a bottom
+   sheet (docs/ui-uudistus.md §5); from 700 px up the top bar carries the
+   brand and Käyttötapa, and the play view gets a side column (§8). */
+const wideScreen = matchMedia("(min-width: 700px)");
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+/* One set of controls (§1). The fields that make a puzzle are moved, never
+   cloned, so their ids and listeners stay: in play mode into Uusi tehtävä,
+   in print mode back to the rail, each after a comment that marks its home.
+   Käyttötapa sits in the top bar on wide screens; on a phone it is in the
+   rail in print mode and in Uusi tehtävä in play mode. */
+const MOVABLE = ["field-mode", "field-type", "src-wrap", "img-wrap", "field-level", "sym-wrap", "generate", "status"].map(el);
+const HOME = new Map(MOVABLE.map(n => {
+  const mark = document.createComment(" home of #" + n.id + " ");
+  n.before(mark);
+  return [n, mark];
+}));
+
+function placeControls() {
+  const play = state.mode === "play", sheet = el("ov-new-body"), foot = sheet.querySelector(".ov-foot");
+  for (const n of MOVABLE) {
+    if (n.id === "field-mode" && wideScreen.matches) el("slot-mode").appendChild(n);
+    else if (play) sheet.insertBefore(n, foot);
+    else HOME.get(n).after(n);
+  }
+}
+
+/* ============================================================
+   Overlays (§3, §5.4, §8.3): modal <dialog>s, so Esc, the focus trap and
+   the backdrop come from the browser. A click on the backdrop closes one,
+   and focus goes back to the button that opened it.
+   ============================================================ */
+
+const Overlay = (() => {
+  const openers = new Map(), watchers = [];
+  const all = () => [...document.querySelectorAll("dialog.overlay")];
+  const changed = () => { for (const fn of watchers) fn(); };
+
+  /* On wide screens a popover hangs 8 px under its button, right-aligned
+     to it. Positioned here rather than with CSS anchors, which not every
+     browser has. */
+  function place(dlg) {
+    dlg.style.top = dlg.style.left = "";
+    const b = openers.get(dlg);
+    if (!dlg.classList.contains("pop") || !wideScreen.matches || !b || !b.isConnected) return;
+    const r = b.getBoundingClientRect(), w = dlg.offsetWidth;
+    dlg.style.top = Math.round(r.bottom + 8) + "px";
+    dlg.style.left = Math.round(Math.max(8, Math.min(r.right - w, innerWidth - w - 8))) + "px";
+  }
+
+  /* stacked: opened from another overlay, which stays open under it */
+  function open(dlg, opener, stacked) {
+    if (dlg.open) return;
+    openers.set(dlg, opener || document.activeElement);
+    dlg.classList.toggle("stacked", !!stacked);
+    dlg.showModal();
+    place(dlg);
+    if (opener && opener.hasAttribute("aria-expanded")) opener.setAttribute("aria-expanded", "true");
+    changed();
+  }
+  const close = dlg => { if (dlg && dlg.open) dlg.close(); };
+
+  for (const dlg of all()) {
+    dlg.addEventListener("close", () => {
+      const b = openers.get(dlg), a = document.activeElement;
+      openers.delete(dlg);
+      if (b && b.hasAttribute("aria-expanded")) b.setAttribute("aria-expanded", "false");
+      /* unless whatever closed it moved focus on purpose (to the board) */
+      if (b && b.isConnected && (!a || a === document.body || dlg.contains(a))) b.focus({preventScroll: true});
+      changed();
+    });
+    dlg.addEventListener("click", e => {
+      if (e.target.closest("[data-close]")) { close(dlg); return; }
+      if (e.target !== dlg) return;
+      const r = dlg.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) close(dlg);
+    });
+  }
+  addEventListener("resize", () => { for (const d of all()) if (d.open) place(d); });
+
+  return {
+    open, close,
+    closeAll: () => all().reverse().forEach(close),
+    anyOpen: () => all().some(d => d.open),
+    onChange: fn => watchers.push(fn)
+  };
+})();
+
 function bindSegment(id, key, cast, onChange) {
   el(id).addEventListener("click", e => {
     const btn = e.target.closest("button");
@@ -585,9 +673,11 @@ function syncMode() {
   for (const id of ["field-count", "field-layout"]) el(id).hidden = pic || play;
   for (const id of ["field-title", "sol-wrap", "print", "pdf-hint"]) el(id).hidden = play;
   el("preview").hidden = play;
+  el("rail").hidden = play;
   el("play").hidden = !play;
   document.body.classList.toggle("playing", play);
-  el("generate").textContent = play ? "Luo tehtävä" : "Luo tehtävät";
+  el("generate-label").textContent = play ? "Luo tehtävä" : "Luo tehtävät";
+  placeControls();
   el("seg-source").querySelectorAll("button").forEach(b =>
     b.setAttribute("aria-pressed", String(b.dataset.value === state.source)));
   el("seg-mode").querySelectorAll("button").forEach(b =>
@@ -683,14 +773,33 @@ function syncType() {
   const t = TYPES[state.type];
   el("rules").textContent = t.rules;
   el("title").placeholder = t.name;
-  const wrap = el("sym-wrap");
   el("opt-symmetry").disabled = !t.symmetry;
-  wrap.classList.toggle("off", !t.symmetry);
+  el("sym-wrap").classList.toggle("off", !t.symmetry);
+  syncSwitch();
   syncMode();
   refreshPicture(false);
   if (window.Play) window.Play.typeChanged();
 }
 el("type").addEventListener("change", syncType);
+
+/* the symmetry switch of Uusi tehtävä drives the rail's checkbox, which
+   stays the source of truth */
+const symBox = el("opt-symmetry"), symSwitch = el("sym-switch");
+function syncSwitch() {
+  symSwitch.setAttribute("aria-checked", String(symBox.checked));
+  symSwitch.disabled = symBox.disabled;
+}
+symSwitch.addEventListener("click", () => {
+  if (symBox.disabled) return;
+  symBox.checked = !symBox.checked;
+  symBox.dispatchEvent(new Event("change", {bubbles: true}));
+});
+symBox.addEventListener("change", syncSwitch);
+wideScreen.addEventListener("change", () => {
+  placeControls();
+  if (window.Play) window.Play.layoutChanged();
+});
+
 syncType();
 
 const countInput = el("count");
@@ -883,7 +992,10 @@ async function generate() {
     (failed ? ` ${failed} ei syntynyt.` : "") + note;
   generateBtn.disabled = false;
   printBtn.disabled = false;
-  window.scrollTo({top: 0, behavior: "smooth"});
+  /* on a phone the rail stands above the sheets, so go to the first one */
+  const behavior = reducedMotion.matches ? "auto" : "smooth";
+  if (wideScreen.matches) window.scrollTo({top: 0, behavior});
+  else previewEl.querySelector(".sheet").scrollIntoView({block: "start", behavior});
 }
 
 generateBtn.addEventListener("click", () => { generate(); });

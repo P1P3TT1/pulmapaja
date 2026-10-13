@@ -18,8 +18,11 @@ window.Play = (() => {
   const $ = id => document.getElementById(id);
   const playEl = $("play"), boardEl = $("play-board"), padEl = $("play-pad"), modesEl = $("play-modes");
   const statusEl = $("play-status"), srEl = $("play-sr"), openErr = $("open-err");
+  const cardEl = $("board-card"), dockEl = $("play-dock"), clockEl = $("play-clock");
+  const ovNew = $("ov-new"), ovShare = $("ov-share"), ovMine = $("ov-mine"), ovRules = $("ov-rules");
 
   /* P: {type, level, item, prog: {val, notes}, {marks} or {bridges}, id, elapsed, done,
+         paused  the player paused     pausedByOverlay  an overlay is open (§6)
          ctl     "digits", "shading" or "bridges" (codec.js codeController)
          n       cells per row          N      cells in all
          d       digit range            total  cells a player fills, givens included
@@ -40,7 +43,9 @@ window.Play = (() => {
     const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
     return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0");
   };
-  const levelTag = (level, item) => level === "none" ? `${item.n} × ${item.n}` : (LEVEL_LABEL[level] || "");
+  /* "Helppo", or the grid size of a picture nonogram */
+  const levelTag = (level, item) => level === "none" ? `${item.n} × ${item.n}`
+    : LEVEL_LABEL[level] ? LEVEL_LABEL[level][0].toUpperCase() + LEVEL_LABEL[level].slice(1) : "";
   const filledCount = () => {
     if (P.ctl === "bridges") return P.prog.bridges.reduce((s, w) => s + w, 0);
     const a = P.ctl === "shading" ? P.prog.marks : P.prog.val;
@@ -122,27 +127,15 @@ window.Play = (() => {
       : ngram ? "Nonogrammiruudukko. Liiku nuolinäppäimillä, välilyönti värittää ja X merkitsee rastin."
       : (["sudoku", "kropki", "killer"].includes(item.kind) ? "Sudokuruudukko" : "Ruudukko") +
         ". Liiku nuolinäppäimillä ja kirjoita numero.");
-    /* the board's width in cells, which --cell is fitted to: futoshiki adds
-       its sign gaps, pilvenpiirtäjät a clue strip on each side, and the
-       nonogram its row clues, estimated from their digits */
-    let span = item.kind === "futoshiki" ? P.n + (P.n - 1) * 0.42
-      : item.kind === "skyscrapers" ? P.n + 2 : P.n;
-    if (ngram) {
-      let widest = 0;
-      for (const nums of item.rowClues) {
-        const w = (nums.length ? nums : [0]).reduce((s, x) => s + String(x).length * 0.38 + 0.3, 0.2);
-        widest = Math.max(widest, w);
-      }
-      span = P.n + widest;
-    }
-    playEl.style.setProperty("--span", span);
     playEl.style.setProperty("--d", P.d || 1);
+    /* on wide screens the pad is a block of three columns, or two for 1–4 */
+    playEl.style.setProperty("--pad-cols", P.d === 4 ? 2 : 3);
     playEl.classList.toggle("ctl-shading", shading);
     playEl.classList.toggle("ctl-nonogram", ngram);
     padEl.hidden = shading;
     modesEl.hidden = !ngram;
     $("t-notes").hidden = shading;
-    $("play-tools").style.gridTemplateColumns = `repeat(${shading ? 3 : 4},1fr)`;
+    $("play-tools").classList.toggle("three", shading);
     shadeMode = "fill";
     if (shading) {
       $("play-keys").innerHTML = ngram
@@ -215,14 +208,31 @@ window.Play = (() => {
     c.setAttribute("aria-label", cellLabel(i));
   }
 
+  /* the title pill, the clock, the rules and the done banner */
   function renderHead() {
-    $("play-name").textContent = TYPES[P.type].name;
-    $("play-tag").textContent = levelTag(P.level, P.item);
-    $("play-clock").textContent = fmtTime(P.elapsed);
+    const name = TYPES[P.type].name, tag = levelTag(P.level, P.item);
+    $("play-name").textContent = name;
+    $("play-tag").textContent = tag;
+    $("title-pill").setAttribute("aria-label", `${name}, ${tag.toLowerCase()}. Vaihda pulmaa tai luo uusi`);
+    $("play-rules").textContent = $("rules-text").textContent = TYPES[P.type].rules;
+    renderClock();
     const done = $("play-done");
     done.hidden = !P.done;
     if (P.done) done.textContent = `Ratkaistu ajassa ${fmtTime(P.elapsed)}. Hienoa!`;
     playEl.classList.toggle("is-done", P.done);
+  }
+
+  /* The clock pill pauses and resumes (§6). A solved puzzle has nothing to
+     pause, so its time is plain text. */
+  function renderClock() {
+    const t = fmtTime(P.elapsed);
+    $("play-time").textContent = t;
+    clockEl.hidden = P.done;
+    clockEl.classList.toggle("is-paused", P.paused);
+    clockEl.setAttribute("aria-label", `${P.paused ? "Jatka" : "Tauko"}, käytetty aika ${t}`);
+    const plain = $("play-clock-done");
+    plain.hidden = !P.done;
+    plain.innerHTML = `<span class="sr">Käytetty aika </span>${t}`;
   }
 
   function render() {
@@ -408,12 +418,18 @@ window.Play = (() => {
     P.total = ctl === "bridges" ? item.solution.reduce((s, w) => s + w, 0) : P.open.reduce((s, x) => s + x, 0);
     P.id = encodeCode(type, level, item, null).code;
     P.done = solved();
+    /* a reopened puzzle runs: the pause is not saved */
+    P.paused = false;
+    P.pausedByOverlay = Overlay.anyOpen();
     undo = []; notesMode = false;
     sel = P.done || ctl !== "digits" ? -1 : P.prog.val.findIndex((v, i) => !v && P.open[i]);
     playEl.classList.remove("no-puzzle");
     setRail(type, level);
+    PlayStore.touchRecent(type);
     buildBoard();
     render(); renderCodes(); save(); renderSaved();
+    renderPause();
+    fit();
     say(msg || "");
   }
 
@@ -469,6 +485,9 @@ window.Play = (() => {
   }
 
   function create() {
+    /* "Luo tehtävä" closes Uusi tehtävä first, so a failure shows in the
+       status line under the board */
+    Overlay.close(ovNew);
     if (busy) return;
     const type = state.type, level = state.level;
     if (!PLAYABLE.has(type)) { say(NOT_YET); return; }
@@ -743,13 +762,12 @@ window.Play = (() => {
     });
     P.cross = hashiCrossings(item.edges, n);
     P.cells = [];
-    playEl.style.setProperty("--span", n);
     playEl.style.setProperty("--d", 1);
     playEl.classList.remove("ctl-shading", "ctl-nonogram");
     padEl.hidden = true;
     modesEl.hidden = true;
     $("t-notes").hidden = true;
-    $("play-tools").style.gridTemplateColumns = "repeat(3,1fr)";
+    $("play-tools").classList.add("three");
     boardEl.setAttribute("aria-label", "Siltaruudukko. Liiku saarelta toiselle nuolinäppäimillä, Shift ja nuoli lisää sillan.");
     $("play-keys").innerHTML = `Vedä saarelta naapurisaareen tai napauta kahta saarta peräkkäin: siltoja tulee yksi, sitten kaksi, ` +
       `sitten ei yhtään. Näppäimistöllä: <kbd>←↑→↓</kbd> siirtyy saarelta toiselle, <kbd>Shift</kbd> + nuoli lisää sillan ` +
@@ -893,45 +911,244 @@ window.Play = (() => {
     if (k === "Backspace" || k === "Delete") { clearIsland(sel); e.preventDefault(); }
   }
 
-  /* ---------- info column ---------- */
+
+  /* ---------- board size ---------- */
+
+  /* --cell is fitted in script (docs/ui-uudistus.md §4): the room the board
+     gets depends on the controller, since hashi has no pad and a nonogram
+     has a mode toggle. Every renderer scales linearly with --cell, so the
+     board is measured once at the current size and scaled to the room; a
+     second pass only takes up the pixels of the borders, which do not
+     scale. A nonogram may go below the usual 22 px, so a 25 × 25 picture
+     still fits a phone. */
+  const stageEl = $("play-stage"), doneEl = $("play-done");
+  function room() {
+    const cs = getComputedStyle(cardEl);
+    const cardX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const cardY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    if (wideScreen.matches) {
+      /* beside the side column, or the whole row once the side column has
+         wrapped under the board; down to the window's bottom edge, less room
+         for the done banner */
+      const wrapped = dockEl.offsetTop >= stageEl.offsetTop + stageEl.offsetHeight - 1;
+      const w = playEl.clientWidth - (wrapped ? 0 : dockEl.offsetWidth + 24);
+      const h = innerHeight - (cardEl.getBoundingClientRect().top + scrollY) - 76;
+      return [w - cardX, h - cardY];
+    }
+    /* a phone: the stage between the bars, less the clock row and the
+       status line */
+    const ss = getComputedStyle(stageEl), gap = parseFloat(ss.rowGap) || 0;
+    const top = Math.max(clockEl.offsetHeight, $("rules-btn").offsetHeight, $("play-clock-done").offsetHeight);
+    const bottom = Math.max(statusEl.offsetHeight, doneEl.offsetHeight);
+    const w = stageEl.clientWidth - parseFloat(ss.paddingLeft) - parseFloat(ss.paddingRight);
+    const h = stageEl.clientHeight - parseFloat(ss.paddingTop) - parseFloat(ss.paddingBottom) - top - bottom - 2 * gap;
+    return [w - cardX, h - cardY];
+  }
+
+  function fit() {
+    if (!P || state.mode !== "play" || boardEl.hidden || !boardEl.firstElementChild) return;
+    const [availW, availH] = room();
+    if (availW <= 0 || availH <= 0) return;
+    const min = P.item.kind === "nonogram" ? 10 : 22, max = wideScreen.matches ? 56 : 54;
+    for (let pass = 0; pass < 2; pass++) {
+      const r = boardEl.firstElementChild.getBoundingClientRect();
+      const cell = parseFloat(playEl.style.getPropertyValue("--cell")) || 40;
+      if (!r.width || !r.height) return;
+      const scale = Math.min(availW / r.width, availH / r.height);
+      if (pass && scale >= 1) return;
+      const next = Math.max(min, Math.min(max, pass ? cell - 1 : Math.floor(cell * scale)));
+      if (next === cell) return;
+      playEl.style.setProperty("--cell", next + "px");
+    }
+  }
+  const fitter = new ResizeObserver(() => fit());
+  for (const node of [playEl, stageEl, statusEl]) fitter.observe(node);
+  window.addEventListener("resize", fit);
+
+  /* ---------- pause (§6) ---------- */
+
+  /* The clock pill, the key P, or an open overlay. Two flags, so an overlay
+     closing does not undo the player's own pause. Only the player's pause
+     hides the board; the dock goes inert with it. */
+  function setPaused(on) {
+    if (!P || P.done || P.paused === on) return;
+    P.paused = on;
+    renderPause();
+    (on ? $("resume-btn") : boardEl).focus({preventScroll: true});
+  }
+
+  function renderPause() {
+    const hide = !!(P && P.paused && !P.done), panel = $("play-paused");
+    if (hide && !boardEl.hidden) {
+      /* the panel takes the board's place at the board's size */
+      const r = boardEl.getBoundingClientRect();
+      panel.style.width = r.width + "px";
+      panel.style.height = r.height + "px";
+    }
+    boardEl.hidden = hide;
+    panel.hidden = !hide;
+    dockEl.inert = hide;
+    playEl.classList.toggle("is-paused", hide);
+    if (P) renderClock();
+  }
+
+  clockEl.addEventListener("click", () => { if (P) setPaused(!P.paused); });
+  $("resume-btn").addEventListener("click", () => setPaused(false));
+  document.addEventListener("keydown", e => {
+    if ((e.key !== "p" && e.key !== "P") || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (state.mode !== "play" || !P || P.done || Overlay.anyOpen()) return;
+    if (e.target.closest && e.target.closest("input, textarea, select")) return;
+    setPaused(!P.paused);
+    e.preventDefault();
+  });
+
+  /* every overlay pauses the clock while it is open */
+  Overlay.onChange(() => { if (P) P.pausedByOverlay = Overlay.anyOpen(); });
+
+  /* ---------- top bar ---------- */
+
+  for (const id of ["title-pill", "new-btn"]) $(id).addEventListener("click", e => Overlay.open(ovNew, e.currentTarget));
+  $("rules-btn").addEventListener("click", e => Overlay.open(ovRules, e.currentTarget));
+  $("share-btn").addEventListener("click", e => openShare(e.currentTarget));
+  $("menu-btn").addEventListener("click", e => openMine(e.currentTarget));
+
+  /* briefly swaps a line of text, then puts it back */
+  function flash(node, text, ms) {
+    if (!("was" in node.dataset)) node.dataset.was = node.textContent;
+    node.textContent = text;
+    clearTimeout(node.flashTimer);
+    node.flashTimer = setTimeout(() => { node.textContent = node.dataset.was; delete node.dataset.was; }, ms);
+  }
+
+  /* ---------- Jaa ja jatka ---------- */
+
+  const canShare = typeof navigator.share === "function";
+  if (!canShare) {
+    $("share-link-t").textContent = "Kopioi tehtävän linkki";
+    $("share-link-icon").innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+      `stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4L12 5.6"/>` +
+      `<path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg>`;
+  }
+
+  /* where a shared link opens: the hosted app, since a link to a file on
+     this computer is no use to a friend; failing that this page */
+  const shareUrl = code => (PLAY_BASE_URL || location.href.split("#")[0]) + "#" + code;
+  const percent = () => P.done ? 100 : Math.min(99, Math.round(filledCount() / Math.max(1, P.total) * 100));
+
+  function openShare(opener) {
+    if (!P) return;
+    $("share-pct").textContent = percent() + " %";
+    showQr(false);
+    setCodes(false);
+    Overlay.open(ovShare, opener);
+  }
+
+  /* the share sheet where there is one, else the clipboard; a cancelled
+     share sheet does nothing */
+  async function shareCode(code, note) {
+    const url = shareUrl(code);
+    if (canShare) {
+      try { await navigator.share({title: "Pulmapaja – " + TYPES[P.type].name, url}); return; }
+      catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      flash(note, "Linkki kopioitu.", 2200);
+    } catch {
+      setCodes(true);
+      const ta = $(code === P.id ? "code-a" : "code-b");
+      ta.focus(); ta.select();
+      flash(note, "Valittu – kopioi itse", 2600);
+    }
+  }
+  $("share-link").addEventListener("click", () => shareCode(P.id, $("share-link-n")));
+  $("share-prog").addEventListener("click", () => shareCode(progressCode(), $("share-prog-n")));
+
+  /* the puzzle-only link as a QR code, for a phone next to this screen */
+  function showQr(on) {
+    $("share-main").hidden = on;
+    $("share-qrview").hidden = !on;
+    if (!on) return;
+    const qr = qrcode(0, "M");
+    qr.addData(shareUrl(P.id), "Byte");
+    qr.make();
+    const n = qr.getModuleCount(), q = 3, d = [];
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d.push(`M${c + q} ${r + q}h1v1h-1z`);
+    $("qr-big").innerHTML = `<svg viewBox="0 0 ${n + 2 * q} ${n + 2 * q}" shape-rendering="crispEdges" aria-hidden="true">` +
+      `<rect width="100%" height="100%" fill="#fff"/><path d="${d.join("")}" fill="#000"/></svg>`;
+    $("qr-back").focus();
+  }
+  $("share-qr").addEventListener("click", () => showQr(true));
+  $("qr-back").addEventListener("click", () => { showQr(false); $("share-qr").focus(); });
+
+  function setCodes(open) {
+    const t = $("codes-toggle");
+    t.setAttribute("aria-expanded", String(open));
+    t.querySelector("span").textContent = open ? "Piilota koodit" : "Näytä koodit";
+    $("codes-body").hidden = !open;
+  }
+  $("codes-toggle").addEventListener("click", e =>
+    setCodes(e.currentTarget.getAttribute("aria-expanded") !== "true"));
+
+  ovShare.addEventListener("click", e => {
+    const cp = e.target.closest("[data-copy]");
+    if (!cp) return;
+    const ta = $(cp.dataset.copy), len = $(cp.dataset.len);
+    const fallback = () => { ta.focus(); ta.select(); flash(len, "Valittu – kopioi itse", 2600); };
+    try { navigator.clipboard.writeText(ta.value).then(() => flash(len, "Kopioitu", 1600), fallback); } catch { fallback(); }
+  });
+
+  /* ---------- Omat tehtävät ---------- */
+
+  const canPaste = !!(navigator.clipboard && navigator.clipboard.readText);
+
+  function openMine(opener) {
+    renderSaved();
+    openErr.textContent = "";
+    $("paste-btn").hidden = !canPaste;
+    Overlay.open(ovMine, opener);
+  }
+
+  /* opening a puzzle from either list closes the overlay */
+  function openFrom(raw, onError) {
+    if (!openCode(raw, onError)) return false;
+    Overlay.close(ovMine);
+    boardEl.focus({preventScroll: true});
+    return true;
+  }
 
   $("open-btn").addEventListener("click", () => {
     const input = $("open-in");
-    if (openCode(input.value, m => { openErr.textContent = m; })) { input.value = ""; openErr.textContent = ""; }
+    if (openFrom(input.value, m => { openErr.textContent = m; })) { input.value = ""; openErr.textContent = ""; }
   });
   $("open-in").addEventListener("input", () => { openErr.textContent = ""; });
+  /* a refused clipboard leaves the field as it was */
+  $("paste-btn").addEventListener("click", () => {
+    navigator.clipboard.readText().then(t => { $("open-in").value = t.trim(); openErr.textContent = ""; }, () => {});
+  });
 
-  playEl.addEventListener("click", e => {
-    const cp = e.target.closest("[data-copy]");
-    if (cp) {
-      const ta = $(cp.dataset.copy);
-      const reset = ms => setTimeout(() => { cp.textContent = "Kopioi"; }, ms);
-      const done = () => { cp.textContent = "Kopioitu"; reset(1600); };
-      const fallback = () => { ta.focus(); ta.select(); cp.textContent = "Valittu – kopioi itse"; reset(2400); };
-      try { navigator.clipboard.writeText(ta.value).then(done, fallback); } catch { fallback(); }
-      return;
-    }
+  ovMine.addEventListener("click", e => {
     const op = e.target.closest("[data-open]");
-    if (op) {
-      if (openCode(op.dataset.open, say)) boardEl.focus({preventScroll: true});
-      return;
-    }
+    if (op) { openFrom(op.dataset.open, m => { openErr.textContent = m; }); return; }
     const del = e.target.closest("[data-del]");
-    if (del) {
-      const id = del.dataset.del;
-      PlayStore.remove(id);
-      renderSaved();
-      say(P && id === P.id ? "Tallennus poistettu. Se tallentuu uudelleen seuraavasta siirrosta." : "Tallennus poistettu.");
-    }
+    if (!del) return;
+    const id = del.dataset.del, at = [...ovMine.querySelectorAll("[data-del]")].indexOf(del);
+    PlayStore.remove(id);
+    renderSaved();
+    say(P && id === P.id ? "Tallennus poistettu. Se tallentuu uudelleen seuraavasta siirrosta." : "Tallennus poistettu.");
+    /* focus stays in the list: the next row's Poista, else the close button */
+    const left = ovMine.querySelectorAll("[data-del]");
+    (left[Math.min(at, left.length - 1)] || ovMine.querySelector("[data-close]")).focus();
   });
 
   /* ---------- clock ---------- */
 
-  /* runs only while a puzzle is on screen, unsolved and visible */
+  /* runs only while a puzzle is on screen, unsolved, unpaused, visible and
+     not under an overlay */
   setInterval(() => {
-    if (state.mode !== "play" || !P || P.done || document.hidden) return;
+    if (state.mode !== "play" || !P || P.done || P.paused || P.pausedByOverlay || document.hidden) return;
     P.elapsed += 1;
-    $("play-clock").textContent = fmtTime(P.elapsed);
+    renderClock();
     if (++ticks % 5 === 0) save();
   }, 1000);
   document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
@@ -940,13 +1157,18 @@ window.Play = (() => {
 
   function showEmpty() {
     playEl.classList.add("no-puzzle");
+    const name = TYPES[state.type].name;
+    $("play-name").textContent = name;
+    $("play-tag").textContent = "";
+    $("title-pill").setAttribute("aria-label", `${name}. Vaihda pulmaa tai luo uusi`);
+    $("play-rules").textContent = $("rules-text").textContent = TYPES[state.type].rules;
   }
 
   /* called by the rail after the Käyttötapa switch */
   function modeChanged() {
     el("status").textContent = "";
-    if (state.mode !== "play") { save(); setHash(""); return; }
-    if (P) { setHash(P.id); renderSaved(); return; }
+    if (state.mode !== "play") { Overlay.closeAll(); save(); setHash(""); return; }
+    if (P) { setHash(P.id); renderSaved(); fit(); return; }
     /* the last puzzle of this browser first, then a new one */
     const last = PlayStore.last();
     if (typeof last === "string" && CODE_IN_HASH.test(last) && PlayStore.record(last) &&
@@ -962,8 +1184,12 @@ window.Play = (() => {
 
   function typeChanged() {
     if (state.mode !== "play") return;
+    if (!P) showEmpty();
     say(PLAYABLE.has(state.type) ? "" : NOT_YET);
   }
+
+  /* called when the screen crosses 700 px */
+  function layoutChanged() { fit(); }
 
   /* a code pasted into the address bar of an open tab */
   window.addEventListener("hashchange", () => {
@@ -1003,5 +1229,5 @@ window.Play = (() => {
     }
   })();
 
-  return {create, modeChanged, typeChanged};
+  return {create, modeChanged, typeChanged, layoutChanged};
 })();

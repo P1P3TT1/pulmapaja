@@ -1,15 +1,19 @@
 "use strict";
 
-/* Play-mode storage in this browser. Every read and write may fail (a private
-   window, blocked site data, an artifact preview), so each call sits in
-   try/catch and the app works fully without storage.
+/* Storage in this browser. Every read and write may fail (a private window,
+   blocked site data, an artifact preview), so each call sits in try/catch
+   and the app works fully without storage.
 
      pulmapaja.play.<puzzle-only code>  {progress, type, level, elapsed, done, filled, total, updated}
      pulmapaja.play.index               puzzle codes, most recent first, at most 20
-     pulmapaja.play.last                the puzzle opened last */
+     pulmapaja.play.last                the puzzle opened last
+     pulmapaja.recent                   type ids last created or opened, in either
+                                        mode, most recent first, at most 4: the
+                                        type picker's "Viimeksi käytetyt" */
 
 const PlayStore = (() => {
   const PREFIX = "pulmapaja.play.", INDEX = PREFIX + "index", LAST = PREFIX + "last", MAX = 20;
+  const RECENT = "pulmapaja.recent", MAX_RECENT = 4;
 
   const get = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const set = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
@@ -38,6 +42,15 @@ const PlayStore = (() => {
     /* [id, record] pairs, most recent first */
     list: () => index().map(id => [id, get(PREFIX + id)]).filter(([, r]) => r && typeof r === "object"),
 
-    last: () => get(LAST)
+    last: () => get(LAST),
+
+    recent() {
+      const x = get(RECENT);
+      return Array.isArray(x) ? x.filter(t => typeof t === "string").slice(0, MAX_RECENT) : [];
+    },
+
+    touchRecent(type) {
+      set(RECENT, [type, ...PlayStore.recent().filter(t => t !== type)].slice(0, MAX_RECENT));
+    }
   };
 })();

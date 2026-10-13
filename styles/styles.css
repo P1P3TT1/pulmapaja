@@ -678,6 +678,47 @@ body:not(.playing) .play-only{display:none!important}
 .err{margin:0;font-size:12.5px;color:var(--red)}
 .err:empty{display:none}
 
+/* Pulmatyyppi: the row that opens the picker, in the rail and in Uusi
+   tehtävä; the select behind it stays out of sight */
+#type{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.type-row{appearance:none;border:0;width:100%;min-height:68px;display:flex;align-items:center;gap:12px;padding:10px 14px 10px 10px;
+  border-radius:18px;background:var(--surface-2);color:var(--ink);font-family:var(--display);text-align:left;cursor:pointer;transition:background .12s}
+.type-row:hover{background:var(--fill)}
+.type-row .ti{width:48px;height:48px;flex:none;border-radius:13px;background:var(--surface);box-shadow:0 1px 2px rgba(22,32,43,.08);
+  display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.type-row .ti svg{width:30px;height:30px}
+.tr-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.tr-lbl{font-size:13px;font-weight:600;color:var(--ink-soft)}
+.tr-name{font-size:16px;font-weight:600}
+.tr-go{flex:none;display:flex;align-items:center;gap:4px;font-size:14px;font-weight:500;color:var(--blue)}
+
+/* the type picker */
+#ov-types .ov-head{gap:8px}
+#ov-types .back{width:40px;height:40px;margin-left:-6px}
+.recent{display:flex;flex-direction:column;gap:9px}
+.recent .label,.tsec .label{margin:0}
+.rpills{display:flex;flex-wrap:wrap;gap:8px}
+.rpill{appearance:none;border:0;height:38px;padding:0 14px;border-radius:var(--r-pill);background:var(--fill);color:var(--ink);
+  display:inline-flex;align-items:center;gap:6px;font-family:var(--display);font-size:14px;font-weight:500;cursor:pointer}
+.rpill:hover{background:var(--fill-strong)}
+.rpill[aria-pressed="true"]{padding-left:10px;background:var(--blue);color:var(--on-accent);font-weight:600}
+.rpill svg{width:15px;height:15px}
+.tsec{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tile{appearance:none;border:0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:7px;padding:10px 6px 11px;
+  border-radius:18px;background:var(--surface-2);color:var(--ink);font-family:var(--display);font-size:13px;font-weight:500;
+  line-height:1.2;text-align:center;hyphens:manual;overflow-wrap:anywhere;cursor:pointer;transition:background .12s}
+.tile:hover{background:var(--fill)}
+.tile .ti{width:52px;height:52px;flex:none;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.tile[aria-pressed="true"]{background:var(--blue-soft);box-shadow:inset 0 0 0 2px var(--blue);color:var(--blue);font-weight:600}
+@media screen and (max-width:699px){
+  .overlay.tall{top:28px;height:calc(100vh - 28px);height:calc(100dvh - 28px)}
+}
+@media screen and (min-width:700px){
+  #ov-types{width:min(560px,calc(100vw - 32px))}
+  .tiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
 /* Säännöt */
 .rules-text{margin:0;font-size:15px;line-height:1.6}
 

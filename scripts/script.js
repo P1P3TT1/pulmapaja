@@ -6,32 +6,107 @@
    Type-specific data
    ============================================================ */
 
+/* The type picker's sections (docs/ui-uudistus.md §7). A type appears in
+   the picker, and in the hidden <select id="type"> behind it, once it has
+   a cat, a short tile label and an icon. */
+const CATEGORIES = [
+  {id: "sudoku",  label: "Sudokut"},
+  {id: "numbers", label: "Numerot ja vertailut"},
+  {id: "shading", label: "Ruutujen värittäminen"},
+  {id: "connect", label: "Yhdistäminen"}
+];
+
+/* 36 × 36, stroked in the text colour with the accent in --blue, so both
+   themes work. The accent is set in style attributes: an SVG presentation
+   attribute cannot take var(). */
+const typeIcon = body => `<svg width="34" height="34" viewBox="0 0 36 36" fill="none" stroke="currentColor" ` +
+  `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const ICON_FRAME = '<rect x="3" y="3" width="30" height="30" rx="5" stroke-width="2.4"/>';
+const ICON_GRID = '<path d="M13 3v30M23 3v30M3 13h30M3 23h30" stroke-width="1.6" stroke-linecap="butt"/>';
+const iconText = (x, y, t, accent, size = 7, anchor = "middle") =>
+  `<text x="${x}" y="${y}" font-size="${size}" font-family="IBM Plex Mono, monospace" font-weight="600" stroke="none" ` +
+  `text-anchor="${anchor}" style="fill:${accent ? "var(--blue)" : "currentColor"}">${t}</text>`;
+const TYPE_ICONS = {
+  sudoku9: typeIcon(ICON_FRAME + ICON_GRID + iconText(8, 11.5, 5, true) + iconText(28, 31.5, 3, false)),
+  sudoku6: typeIcon(ICON_FRAME + '<path d="M18 3v30M3 13h30M3 23h30" stroke-width="1.6" stroke-linecap="butt"/>' +
+    iconText(10.5, 10.5, 6, true)),
+  diagonal: typeIcon('<path d="M5 5L31 31M31 5L5 31" stroke-width="5" stroke-opacity="0.22" style="stroke:var(--blue)"/>' +
+    ICON_FRAME + ICON_GRID),
+  jigsaw: typeIcon(ICON_FRAME + '<path d="M3 15h8v-6h8V3M19 33V21h-6v-6M33 13h-8v14h-6" stroke-width="2" stroke-linecap="butt"/>'),
+  kropki: typeIcon(ICON_FRAME + ICON_GRID + '<circle cx="13" cy="8" r="3" fill="currentColor" stroke="none"/>' +
+    '<circle cx="18" cy="23" r="3" stroke-width="1.6" style="fill:var(--surface)"/>' +
+    '<circle cx="23" cy="28" r="3" fill="currentColor" stroke="none"/>'),
+  killer: typeIcon(ICON_FRAME + '<path d="M6 6h17v9h-8v15H6zM19 19h11v11H19z" stroke-width="1.6" stroke-dasharray="2.4 2" ' +
+    'stroke-linecap="butt" stroke-linejoin="miter" style="stroke:var(--blue)"/>' + iconText(7.5, 12, 17, true, 6.5, "start")),
+  futoshiki: typeIcon('<rect x="3" y="3" width="12" height="12" rx="3" stroke-width="2"/><rect x="21" y="3" width="12" height="12" rx="3" stroke-width="2"/>' +
+    '<rect x="3" y="21" width="12" height="12" rx="3" stroke-width="2"/><rect x="21" y="21" width="12" height="12" rx="3" stroke-width="2"/>' +
+    '<path d="M19.5 7l-3 2 3 2M7 16.5l2 3 2-3" stroke-width="2" style="stroke:var(--blue)"/>'),
+  skyscrapers: typeIcon('<path d="M3 33h30" stroke-width="2.2"/><rect x="6" y="20" width="6" height="13" rx="1.2" stroke-width="2"/>' +
+    '<rect x="15" y="8" width="6" height="25" rx="1.2" stroke-width="2" fill-opacity="0.18" style="fill:var(--blue);stroke:var(--blue)"/>' +
+    '<rect x="24" y="14" width="6" height="19" rx="1.2" stroke-width="2"/>' + iconText(18, 5.5, 3, true, 6.5)),
+  kakuro: typeIcon(ICON_FRAME + ICON_GRID + '<path d="M3 8a5 5 0 0 1 5-5h5v10H3zM23 3h5a5 5 0 0 1 5 5v5H23zM3 23h10v10H8a5 5 0 0 1-5-5z" ' +
+    'fill="currentColor" stroke="none"/><path d="M13 3h10v10H13z" fill="currentColor" fill-opacity="0.85" stroke="none"/>' +
+    '<path d="M13 3l10 10" stroke-width="1.2" style="stroke:var(--surface)"/>'),
+  hitori: typeIcon('<path d="M13 3h10v10H13zM3 13h10v10H3zM23 23h10v5a5 5 0 0 1-5 5h-5z" fill="currentColor" stroke="none"/>' +
+    ICON_FRAME + ICON_GRID + '<circle cx="28" cy="8" r="3.4" stroke-width="1.6" style="stroke:var(--blue)"/>'),
+  nonogram: typeIcon('<path d="M13 12h20v7H13zM19 19h7v7h-7zM13 26h7v7h-7z" fill="currentColor" stroke="none" opacity="0.85"/>' +
+    '<rect x="12" y="12" width="21" height="21" rx="3" stroke-width="2"/>' +
+    '<path d="M4 15.5h5M4 22.5h3M4 29.5h3M16 3v5M22.5 3v5M29.5 3v5" stroke-width="2" style="stroke:var(--blue)"/>'),
+  hashi: typeIcon('<path d="M13 6.5h11M13 10.5h11M13 29h11" stroke-width="1.8"/><path d="M8.5 13v11" stroke-width="1.8" style="stroke:var(--blue)"/>' +
+    '<circle cx="8.5" cy="8.5" r="5" stroke-width="2"/><circle cx="28.5" cy="8.5" r="5" stroke-width="2"/>' +
+    '<circle cx="8.5" cy="28.5" r="5" stroke-width="2"/><circle cx="28.5" cy="28.5" r="5" stroke-width="2"/>')
+};
+
 const TYPES = {
-  sudoku9: {name: "Sudoku 9 × 9", family: "sudoku", symmetry: true,
+  sudoku9:{name: "Sudoku 9 × 9", family: "sudoku", symmetry: true,
+    cat: "sudoku", short: "Sudoku 9 × 9", icon: TYPE_ICONS.sudoku9,
     rules: "Täytä ruudukko luvuilla 1–9 niin, että jokaisella rivillä, sarakkeessa ja 3 × 3 -lohkossa on kukin luku täsmälleen kerran.",
     cell: {1: "18mm", 2: "11.6mm", 4: "8.8mm", sol: "7.2mm"}},
   sudoku6: {name: "Sudoku 6 × 6", family: "sudoku", symmetry: true,
+    cat: "sudoku", short: "Sudoku 6 × 6", icon: TYPE_ICONS.sudoku6,
     rules: "Täytä ruudukko luvuilla 1–6 niin, että jokaisella rivillä, sarakkeessa ja 3 × 2 -lohkossa on kukin luku täsmälleen kerran.",
     cell: {1: "24mm", 2: "16mm", 4: "12mm", sol: "9mm"}},
   diagonal: {name: "Diagonaalisudoku", family: "sudoku", symmetry: true,
+    cat: "sudoku", short: "Diagonaali\u00ADsudoku", icon: TYPE_ICONS.diagonal,
     rules: "Kuten tavallinen sudoku, mutta myös kummallakin lävistäjällä on oltava kaikki luvut 1–9. Lävistäjät on merkitty harmaalla.",
     cell: {1: "18mm", 2: "11.6mm", 4: "8.8mm", sol: "7.2mm"}},
   jigsaw: {name: "Palapelisudoku", family: "sudoku", symmetry: true,
+    cat: "sudoku", short: "Palapeli\u00ADsudoku", icon: TYPE_ICONS.jigsaw,
     rules: "Kuten tavallinen sudoku, mutta lohkot ovat epäsäännöllisen muotoisia. Jokaisessa lohkossa on luvut 1–9 kerran.",
     cell: {1: "18mm", 2: "11.6mm", 4: "8.8mm", sol: "7.2mm"}},
   kropki: {name: "Kropki-sudoku", family: "kropki", symmetry: false,
+    cat: "sudoku", short: "Kropki-sudoku", icon: TYPE_ICONS.kropki,
     rules: "Täytä ruudukko luvuilla 1–9 niin, että jokaisella rivillä, sarakkeessa ja 3 × 3 -lohkossa on kukin luku täsmälleen kerran. Musta pallo vierekkäisten ruutujen välissä tarkoittaa, että toinen luvuista on kaksinkertainen toiseen nähden. Valkoinen pallo tarkoittaa, että luvut ovat peräkkäisiä. Jos ruutujen välissä ei ole palloa, kumpikaan ehto ei täyty – myös pallon puuttuminen on siis vihje. Luvut 1 ja 2 täyttävät molemmat ehdot, ja niiden välissä on musta-valkoinen yhdistelmäpallo.",
     cell: {1: "18mm", 2: "11.6mm", 4: "8.8mm", sol: "7.2mm"}},
   killer: {name: "Killer-sudoku", family: "killer", symmetry: false,
+    cat: "sudoku", short: "Killer-sudoku", icon: TYPE_ICONS.killer,
     rules: "Täytä ruudukko luvuilla 1–9 niin, että jokaisella rivillä, sarakkeessa ja 3 × 3 -lohkossa on kukin luku täsmälleen kerran. Katkoviivalla rajatun alueen lukujen summa on alueen kulmaan merkitty luku, eikä sama luku saa toistua alueen sisällä.",
     cell: {1: "18mm", 2: "11.6mm", 4: "8.8mm", sol: "7.2mm"}},
   futoshiki: {name: "Futoshiki", family: "futoshiki", symmetry: false,
+    cat: "numbers", short: "Futoshiki", icon: TYPE_ICONS.futoshiki,
     rules: "Täytä ruudukko luvuilla 1–n niin, että kullakin rivillä ja sarakkeessa on kukin luku kerran. Ruutujen väliset merkit kertovat, kumpi luku on suurempi.",
     cell: {1: "20mm", 2: "12mm", 4: "9mm", sol: "8mm"}},
+  skyscrapers: {name: "Pilvenpiirtäjät", family: "skyscrapers", symmetry: false,
+    cat: "numbers", short: "Pilven\u00ADpiirtäjät", icon: TYPE_ICONS.skyscrapers,
+    rules: "Täytä ruudukko niin, että jokaisella rivillä ja sarakkeessa on kukin luku 1:stä ruudukon kokoon asti täsmälleen kerran. Luvut ovat pilvenpiirtäjien korkeuksia. Reunan luku kertoo, montako pilvenpiirtäjää näkyy, kun riviä tai saraketta katsotaan siitä suunnasta: korkeampi rakennus peittää kaikki matalammat takanaan.",
+    cell: {1: "19mm", 2: "12.5mm", 4: "9.5mm", sol: "8mm"},
+    /* the clue strips make the footprint n + 2 cells a side, and n grows
+       from 5 to 6, so each level gets its own sizes */
+    cellByLevel: {
+      easy:   {1: "22mm", 2: "14mm",   4: "10.5mm", sol: "9mm"},
+      medium: {1: "19mm", 2: "12.5mm", 4: "9.5mm",  sol: "8mm"},
+      hard:   {1: "19mm", 2: "12.5mm", 4: "9.5mm",  sol: "8mm"}
+    }},
   kakuro: {name: "Kakuro", family: "kakuro", symmetry: false,
+    cat: "numbers", short: "Kakuro", icon: TYPE_ICONS.kakuro,
     rules: "Täytä valkoiset ruudut luvuilla 1–9. Jokaisen vaaka- ja pystyjonon summa on merkitty mustaan ruutuun, eikä sama luku saa toistua samassa jonossa.",
     cell: {1: "16mm", 2: "10mm", 4: "8mm", sol: "6.5mm"}},
+  hitori: {name: "Hitori", family: "hitori", symmetry: false,
+    cat: "shading", short: "Hitori", icon: TYPE_ICONS.hitori,
+    rules: "Väritä ruutuja niin, ettei millään rivillä tai sarakkeessa ole samaa lukua kahdesti värittämättömissä ruuduissa. Värjätyt ruudut eivät saa koskettaa toisiaan sivuistaan, ja värjäämättömien on muodostettava yhtenäinen alue.",
+    cell: {1: "20mm", 2: "13mm", 4: "10mm", sol: "8mm"}},
   nonogram: {name: "Nonogrammi", family: "nonogram", symmetry: false,
+    cat: "shading", short: "Nonogrammi", icon: TYPE_ICONS.nonogram,
     rules: "Väritä ruutuja niin, että kunkin rivin ja sarakkeen värjätyt jaksot vastaavat sen reunaan merkittyjä lukuja. Luvut kertovat järjestyksessä, montako ruutua kussakin yhtenäisessä jaksossa on, ja jaksojen välissä on ainakin yksi värjäämätön ruutu. Nolla tarkoittaa, ettei rivillä ole yhtään värjättyä ruutua. Valmis ruudukko muodostaa kuvion.",
     cell: {1: "9mm", 2: "6mm", 4: "4.5mm", sol: "4mm"},
     /* the grid doubles from 10 to 20 across the levels, far more than any
@@ -42,20 +117,8 @@ const TYPES = {
       medium: {1: "9.7mm",  2: "6.2mm", 4: "4.3mm", sol: "4.8mm"},
       hard:   {1: "7.3mm",  2: "4.8mm", 4: "3.4mm", sol: "3.6mm"}
     }},
-  skyscrapers: {name: "Pilvenpiirtäjät", family: "skyscrapers", symmetry: false,
-    rules: "Täytä ruudukko niin, että jokaisella rivillä ja sarakkeessa on kukin luku 1:stä ruudukon kokoon asti täsmälleen kerran. Luvut ovat pilvenpiirtäjien korkeuksia. Reunan luku kertoo, montako pilvenpiirtäjää näkyy, kun riviä tai saraketta katsotaan siitä suunnasta: korkeampi rakennus peittää kaikki matalammat takanaan.",
-    cell: {1: "19mm", 2: "12.5mm", 4: "9.5mm", sol: "8mm"},
-    /* the clue strips make the footprint n + 2 cells a side, and n grows
-       from 5 to 6, so each level gets its own sizes */
-    cellByLevel: {
-      easy:   {1: "22mm", 2: "14mm",   4: "10.5mm", sol: "9mm"},
-      medium: {1: "19mm", 2: "12.5mm", 4: "9.5mm",  sol: "8mm"},
-      hard:   {1: "19mm", 2: "12.5mm", 4: "9.5mm",  sol: "8mm"}
-    }},
-  hitori: {name: "Hitori", family: "hitori", symmetry: false,
-    rules: "Väritä ruutuja niin, ettei millään rivillä tai sarakkeessa ole samaa lukua kahdesti värittämättömissä ruuduissa. Värjätyt ruudut eivät saa koskettaa toisiaan sivuistaan, ja värjäämättömien on muodostettava yhtenäinen alue.",
-    cell: {1: "20mm", 2: "13mm", 4: "10mm", sol: "8mm"}},
   hashi: {name: "Sillat", family: "hashi", symmetry: false,
+    cat: "connect", short: "Sillat", icon: TYPE_ICONS.hashi,
     rules: "Yhdistä saaret silloilla. Sillat kulkevat suoraan vaaka- tai pystysuunnassa, eivätkä ne saa mennä ristiin eivätkä kulkea saaren yli. Kahden saaren välillä voi olla yksi tai kaksi siltaa. Saaren luku kertoo, montako siltaa siihen liittyy. Lopuksi kaikkien saarten on oltava yhteydessä toisiinsa siltoja pitkin.",
     cell: {1: "15mm", 2: "9mm", 4: "7.5mm", sol: "6mm"},
     /* the grid grows from 7 to 11 across the levels, so each level gets its
@@ -771,6 +834,9 @@ el("img-clear").addEventListener("click", () => {
 function syncType() {
   state.type = el("type").value;
   const t = TYPES[state.type];
+  el("type-row-icon").innerHTML = t.icon;
+  el("type-row-name").textContent = t.name;
+  el("type-row").setAttribute("aria-label", `Pulmatyyppi: ${t.name}. Vaihda`);
   el("rules").textContent = t.rules;
   el("title").placeholder = t.name;
   el("opt-symmetry").disabled = !t.symmetry;
@@ -780,6 +846,14 @@ function syncType() {
   refreshPicture(false);
   if (window.Play) window.Play.typeChanged();
 }
+/* the hidden select gets one option per type, grouped as the picker is */
+for (const cat of CATEGORIES) {
+  const group = document.createElement("optgroup");
+  group.label = cat.label;
+  for (const [id, t] of Object.entries(TYPES)) if (t.cat === cat.id) group.appendChild(new Option(t.name, id));
+  if (group.children.length) el("type").appendChild(group);
+}
+el("type").value = state.type;
 el("type").addEventListener("change", syncType);
 
 /* the symmetry switch of Uusi tehtävä drives the rail's checkbox, which
@@ -801,6 +875,82 @@ wideScreen.addEventListener("change", () => {
 });
 
 syncType();
+
+/* ============================================================
+   Type picker (§7): the recently used types, then a section of tiles per
+   category. Choosing one sets the hidden select and fires its change
+   event, so syncType runs as for any other change. Opened from Uusi
+   tehtävä it sits on top of it, and closing it goes back there.
+   ============================================================ */
+
+const Picker = (() => {
+  const dlg = el("ov-types"), sel = el("type"), recentList = el("types-recent-list");
+  const tiles = [];
+  for (const cat of CATEGORIES) {
+    const ids = Object.keys(TYPES).filter(id => TYPES[id].cat === cat.id);
+    if (!ids.length) continue;
+    const sec = document.createElement("section");
+    sec.className = "tsec";
+    const h = document.createElement("h3");
+    h.className = "label";
+    h.id = "h-cat-" + cat.id;
+    h.textContent = cat.label;
+    const grid = document.createElement("div");
+    grid.className = "tiles";
+    grid.setAttribute("role", "group");
+    grid.setAttribute("aria-labelledby", h.id);
+    for (const id of ids) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tile";
+      b.dataset.type = id;
+      b.innerHTML = `<span class="ti" aria-hidden="true">${TYPES[id].icon}</span><span class="tn"></span>`;
+      b.lastChild.textContent = TYPES[id].short;
+      grid.appendChild(b);
+      tiles.push(b);
+    }
+    sec.append(h, grid);
+    el("types-body").appendChild(sec);
+  }
+
+  function render() {
+    for (const b of tiles) b.setAttribute("aria-pressed", String(b.dataset.type === state.type));
+    const recent = PlayStore.recent().filter(id => TYPES[id]);
+    el("types-recent").hidden = !recent.length;
+    recentList.replaceChildren(...recent.map(id => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "rpill";
+      b.dataset.type = id;
+      const on = id === state.type;
+      b.setAttribute("aria-pressed", String(on));
+      b.innerHTML = on ? ICON.tick : "";
+      b.append(TYPES[id].name);
+      return b;
+    }));
+  }
+
+  /* from Uusi tehtävä: a back button, and closing returns there */
+  function open(opener, fromSheet) {
+    render();
+    el("types-back").hidden = !fromSheet;
+    el("types-close").hidden = !!fromSheet;
+    Overlay.open(dlg, opener, fromSheet);
+  }
+
+  dlg.addEventListener("click", e => {
+    const b = e.target.closest("[data-type]");
+    if (!b) return;
+    if (sel.value !== b.dataset.type) {
+      sel.value = b.dataset.type;
+      sel.dispatchEvent(new Event("change", {bubbles: true}));
+    }
+    Overlay.close(dlg);
+  });
+
+  el("type-row").addEventListener("click", e => open(e.currentTarget, el("ov-new").open));
+  return {open};
+})();
 
 const countInput = el("count");
 function clampCount() {
@@ -968,6 +1118,7 @@ async function generate() {
     return;
   }
 
+  PlayStore.touchRecent(type);
   const pages = chunk(items, layout);
   /* one picture makes one solution, so give it the page rather than
      stranding it in the six-up grid */

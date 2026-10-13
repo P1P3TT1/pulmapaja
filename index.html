@@ -70,26 +70,17 @@
           </div>
         </div>
 
+        <!-- the select stays the source of truth, out of sight; the row opens
+             the type picker (script.js Picker), which sets it -->
         <div class="field" id="field-type">
-          <label for="type">Pulmatyyppi</label>
-          <select id="type">
-            <optgroup label="Sudokut">
-              <option value="sudoku9">Sudoku 9 × 9</option>
-              <option value="sudoku6">Sudoku 6 × 6</option>
-              <option value="diagonal">Diagonaalisudoku</option>
-              <option value="jigsaw">Palapelisudoku</option>
-              <option value="kropki">Kropki-sudoku</option>
-              <option value="killer">Killer-sudoku</option>
-            </optgroup>
-            <optgroup label="Muut päättelypulmat">
-              <option value="futoshiki">Futoshiki</option>
-              <option value="skyscrapers">Pilvenpiirtäjät</option>
-              <option value="kakuro">Kakuro</option>
-              <option value="hitori">Hitori</option>
-              <option value="hashi">Sillat</option>
-              <option value="nonogram">Nonogrammi</option>
-            </optgroup>
-          </select>
+          <select id="type" tabindex="-1" aria-hidden="true"></select>
+          <button type="button" class="type-row" id="type-row" aria-haspopup="dialog">
+            <span class="ti" id="type-row-icon" aria-hidden="true"></span>
+            <span class="tr-txt"><span class="tr-lbl">Pulmatyyppi</span><span class="tr-name" id="type-row-name"></span></span>
+            <span class="tr-go" aria-hidden="true">Vaihda
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
         </div>
 
         <div class="field" id="src-wrap" hidden>
@@ -347,6 +338,21 @@
           </div>
           <p class="err" id="open-err" role="alert"></p>
         </div>
+      </div>
+    </dialog>
+
+    <dialog class="overlay tall" id="ov-types" aria-labelledby="ov-types-h">
+      <div class="ov-grab" aria-hidden="true"></div>
+      <header class="ov-head">
+        <button type="button" class="icon-btn back" id="types-back" data-close aria-label="Takaisin"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <h2 id="ov-types-h" tabindex="-1" autofocus>Pulmatyyppi</h2>
+        <button type="button" class="icon-btn sm" id="types-close" data-close aria-label="Sulje"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+      </header>
+      <div class="ov-body" id="types-body">
+        <section class="recent" id="types-recent" aria-labelledby="h-recent">
+          <h3 class="label" id="h-recent">Viimeksi käytetyt</h3>
+          <div class="rpills" id="types-recent-list"></div>
+        </section>
       </div>
     </dialog>
 

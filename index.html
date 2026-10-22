@@ -78,8 +78,8 @@
           <button type="button" class="type-row" id="type-row" aria-haspopup="dialog">
             <span class="ti" id="type-row-icon" aria-hidden="true"></span>
             <span class="tr-txt"><span class="tr-lbl">Pulmatyyppi</span><span class="tr-name" id="type-row-name"></span></span>
-            <span class="tr-go" aria-hidden="true">Vaihda
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+            <span class="tr-go">Vaihda
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
             </span>
           </button>
         </div>
@@ -197,7 +197,9 @@
           </button>
           <div class="board-fit" id="board-fit">
             <div class="board-card" id="board-card">
-              <div class="play-board" id="play-board" tabindex="0" role="group"
+              <!-- an application, so a screen reader passes every key through;
+                   the grid inside is hidden and #play-sr speaks for it -->
+              <div class="play-board" id="play-board" tabindex="0" role="application" aria-roledescription="pulmaruudukko"
                    aria-label="Ruudukko. Liiku nuolinäppäimillä ja kirjoita numero."></div>
               <div class="paused" id="play-paused" hidden>
                 <h2>Tauko</h2>

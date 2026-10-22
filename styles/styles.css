@@ -489,6 +489,7 @@ body:not(.playing) .play-only{display:none!important}
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
   font-family:var(--mono);font-size:22px;font-weight:500;line-height:1;transition:background .12s}
 .pad button small{font-family:var(--display);font-size:10px;font-weight:500;color:var(--ink-soft);min-height:1em}
+.pad button small::after{content:attr(data-left)}
 .pad button:hover{background:var(--fill-strong)}
 /* used up, but still a button, so it stays readable */
 .pad button.used{opacity:.65}

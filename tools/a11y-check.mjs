@@ -284,8 +284,9 @@ if (browserGroups.length) {
       await page.focus("#play-board");
       const said = async (keys, label) => {
         await page.evaluate(() => { window.__sr = []; });
-        for (const k of keys) await page.keyboard.press(k);
-        await frames(page);
+        /* a frame after each key: the board speaks on the next frame, and
+           only the last of several texts in one frame */
+        for (const k of keys) { await page.keyboard.press(k); await frames(page); }
         const log = await page.evaluate(() => window.__sr);
         return {label, log, text: log.join(" | ")};
       };

@@ -38,6 +38,15 @@ window.Play = (() => {
   let bridgeDrag = null;
 
   const say = t => { statusEl.textContent = t; };
+  /* The board's voice (docs/saavutettavuus.md §3): the grid itself is hidden
+     from screen readers. The same text twice in a row is not re-read, so the
+     region is cleared first; a second call in the same frame wins. */
+  let speakFrame = 0;
+  function speak(t) {
+    srEl.textContent = "";
+    cancelAnimationFrame(speakFrame);
+    speakFrame = requestAnimationFrame(() => { srEl.textContent = t; });
+  }
   const fmtTime = s => {
     s = Math.floor(s);
     const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
@@ -101,6 +110,7 @@ window.Play = (() => {
     const g = RENDER[item.kind](Object.assign({}, item, {puz: prog.val, puzzle: prog.val}), false);
     g.removeAttribute("role");
     g.removeAttribute("aria-label");
+    g.setAttribute("aria-hidden", "true");
     /* every renderer marks the play cells, and only them, with .cell, in
        reading order; clue strips, gaps and sums use other classes */
     P.cells = [...g.querySelectorAll(".cell")].slice(0, N);
@@ -118,7 +128,6 @@ window.Play = (() => {
       c.appendChild(v);
       c.dataset.i = i;
       c.dataset.base = c.className;
-      if (!P.open[i]) c.setAttribute("aria-label", clueLabel(i));
     });
     boardEl.replaceChildren(g);
     const shading = P.ctl === "shading", ngram = item.kind === "nonogram";
@@ -152,7 +161,9 @@ window.Play = (() => {
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.d = d;
-      b.innerHTML = `<span>${d}</span><small></small>`;
+      /* the count left is drawn from data-left and is in the name, so the
+         button's text is the digit alone (docs/saavutettavuus.md §7) */
+      b.innerHTML = `<span>${d}</span><small aria-hidden="true"></small>`;
       padEl.appendChild(b);
     }
     $("play-keys").innerHTML = `Näppäimistöllä: <kbd>←↑→↓</kbd> liikkuu, <kbd>1</kbd>–<kbd>${P.d}</kbd> kirjoittaa, ` +
@@ -186,7 +197,7 @@ window.Play = (() => {
     }
     if (!P.open[i]) return clueLabel(i);
     const {val, notes} = P.prog, v = val[i];
-    if (v) return where(i) + (P.given[i] ? "annettu " : "") + v;
+    if (v) return where(i) + (P.given[i] ? "annettu " : "") + v + (!P.given[i] && clashes(i) ? ", ristiriita" : "");
     if (notes[i]) {
       const list = [];
       for (let d = 1; d <= P.d; d++) if (notes[i] & bitOf(d)) list.push(d);
@@ -194,6 +205,9 @@ window.Play = (() => {
     }
     return where(i) + "tyhjä";
   }
+
+  /* what the board says about a cell, or an island of sillat */
+  const label = i => P.ctl === "bridges" ? islandLabel(i) : cellLabel(i);
 
   /* one cell of a shading board; also used while a drag paints */
   function renderShadeCell(i, peerSet) {
@@ -205,7 +219,6 @@ window.Play = (() => {
     else if (peerSet && peerSet.has(i)) cls += " peer";
     c.className = cls;
     if (!hitori) c.lastChild.textContent = m === 2 ? "×" : "";
-    c.setAttribute("aria-label", cellLabel(i));
   }
 
   /* the title pill, the clock, the rules and the done banner */
@@ -268,7 +281,6 @@ window.Play = (() => {
         }
         span.innerHTML = h + "</span>";
       } else span.textContent = "";
-      c.setAttribute("aria-label", cellLabel(i));
     });
 
     const counts = new Array(P.d + 1).fill(0);
@@ -278,11 +290,11 @@ window.Play = (() => {
        to count down */
     for (const b of padEl.children) {
       const d = +b.dataset.d, left = P.counted ? P.n - counts[d] : 1;
-      b.querySelector("small").textContent = notesMode || !P.counted ? "" : (left > 0 ? left : "");
+      b.querySelector("small").dataset.left = notesMode || !P.counted ? "" : (left > 0 ? left : "");
       b.classList.toggle("used", !notesMode && left <= 0);
       b.classList.toggle("on", notesMode && sel >= 0 && !!(notes[sel] & bitOf(d)));
       b.setAttribute("aria-label", notesMode ? `Muistiinpano ${d}`
-        : P.counted ? `Numero ${d}, jäljellä ${Math.max(0, left)}` : `Numero ${d}`);
+        : P.counted ? `${d}, jäljellä ${Math.max(0, left)}` : String(d));
     }
     $("t-notes").setAttribute("aria-pressed", String(notesMode));
     renderHead();
@@ -545,6 +557,7 @@ window.Play = (() => {
       undo.push(changes);
     }
     say("");
+    speak(cellLabel(sel));
     afterChange();
   }
 
@@ -554,6 +567,7 @@ window.Play = (() => {
     undo.push([snap(i)]);
     P.prog.marks[i] = m;
     say("");
+    speak(cellLabel(i));
     afterChange();
   }
 
@@ -563,17 +577,21 @@ window.Play = (() => {
     if (!editable(sel) || (!P.prog.val[sel] && !P.prog.notes[sel])) return;
     undo.push([snap(sel)]);
     P.prog.val[sel] = 0; P.prog.notes[sel] = 0;
+    speak(cellLabel(sel));
     afterChange();
   }
 
   function undoStep() {
     if (!P || P.done) return;
     if (!undo.length) { say("Ei kumottavaa."); return; }
-    for (const s of undo.pop()) {
-      if ("e" in s) { P.prog.bridges[s.e] = s.w; continue; }
-      restore(s); sel = s.i;
+    const step = undo.pop();
+    for (const s of step) {
+      if ("e" in s) P.prog.bridges[s.e] = s.w; else restore(s);
     }
+    /* back to the cell the step was made on, not a note it cleared */
+    if ("i" in step[0]) sel = step[0].i;
     say("");
+    speak("Kumottu." + (sel >= 0 ? " " + label(sel) : ""));
     afterChange();
   }
 
@@ -612,6 +630,7 @@ window.Play = (() => {
   function toggleNotes() {
     if (!P) return;
     notesMode = !notesMode;
+    speak(notesMode ? "Muistiinpanot päällä" : "Muistiinpanot pois");
     render();
   }
 
@@ -647,7 +666,7 @@ window.Play = (() => {
     if (!drag) return;
     const changes = drag.changes;
     drag = null;
-    if (changes.length) { undo.push(changes); say(""); afterChange(); }
+    if (changes.length) { undo.push(changes); say(""); speak(cellLabel(sel)); afterChange(); }
   }
 
   function shadePointerDown(e, i) {
@@ -686,7 +705,7 @@ window.Play = (() => {
     if (!c || !P || P.done || !P.open[+c.dataset.i]) return;
     if (P.ctl === "shading") { shadePointerDown(e, +c.dataset.i); return; }
     select(+c.dataset.i);
-    if (P.prog.val[sel] || P.prog.notes[sel]) srEl.textContent = cellLabel(sel);
+    if (P.prog.val[sel] || P.prog.notes[sel]) speak(cellLabel(sel));
     boardEl.focus({preventScroll: true});
     e.preventDefault();
   });
@@ -696,6 +715,8 @@ window.Play = (() => {
     const k = e.key;
     if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === "z") { undoStep(); e.preventDefault(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    /* P pauses from the board only (§2.2), so a dock button does not */
+    if (k === "p" || k === "P") { setPaused(true); e.preventDefault(); return; }
     if (P.ctl === "bridges") { bridgeKey(e); return; }
     if (k.startsWith("Arrow")) {
       if (P.done) return;
@@ -709,7 +730,7 @@ window.Play = (() => {
         if (P.open[y * n + x]) { r = y; c = x; break; }
       }
       select(r * n + c);
-      srEl.textContent = cellLabel(sel);
+      speak(cellLabel(sel));
       e.preventDefault();
       return;
     }
@@ -780,8 +801,8 @@ window.Play = (() => {
     return k;
   };
 
-  function islandLabel(i, counts = bridgeCounts()) {
-    const p = P.item.islands[i];
+  function islandLabel(i) {
+    const p = P.item.islands[i], counts = bridgeCounts();
     return `Rivi ${p.r + 1}, sarake ${p.c + 1}: saari ${p.k}, siltoja ${counts[i]}` + (counts[i] === p.k ? ", valmis" : "");
   }
 
@@ -789,27 +810,29 @@ window.Play = (() => {
      the solution would go. Islands whose count is met turn muted. */
   function drawHashi() {
     const svg = RENDER.hashi(Object.assign({}, P.item, {solution: P.prog.bridges}), true);
-    svg.setAttribute("role", "group");
+    svg.removeAttribute("role");
     svg.removeAttribute("aria-label");
+    svg.setAttribute("aria-hidden", "true");
     const counts = bridgeCounts(), circles = svg.querySelectorAll(".hisland"), texts = svg.querySelectorAll("text");
     P.item.islands.forEach((p, i) => {
       const full = counts[i] === p.k;
       circles[i].setAttribute("class", "hisland" + (full ? " full" : "") + (i === sel ? " sel" : ""));
-      circles[i].setAttribute("aria-label", islandLabel(i, counts));
       texts[i].setAttribute("class", full ? "full" : "");
     });
     P.svg = svg;
     boardEl.replaceChildren(svg);
   }
 
-  /* 0 → 1 → 2 → 0 bridges. A first bridge may not cross one already laid. */
-  function cycleEdge(k) {
+  /* 0 → 1 → 2 → 0 bridges. A first bridge may not cross one already laid.
+     The island `at` is announced. */
+  function cycleEdge(k, at) {
     if (!P || P.done) return false;
     const w = P.prog.bridges[k];
     if (w === 0 && P.cross[k].some(j => P.prog.bridges[j])) { say("Silta ei voi ylittää toista siltaa."); return false; }
     undo.push([{e: k, w}]);
     P.prog.bridges[k] = (w + 1) % 3;
     say("");
+    speak(islandLabel(at));
     afterChange();
     return true;
   }
@@ -823,6 +846,7 @@ window.Play = (() => {
     if (!changes.length) return;
     undo.push(changes);
     say("");
+    speak(islandLabel(i));
     afterChange();
   }
 
@@ -889,7 +913,7 @@ window.Play = (() => {
       }
       sel = -1;
     }
-    if (k < 0 || !cycleEdge(k)) render();
+    if (k < 0 || !cycleEdge(k, d.a)) render();
   }
   boardEl.addEventListener("pointerup", e => endBridgeDrag(e, false));
   boardEl.addEventListener("pointercancel", e => endBridgeDrag(e, true));
@@ -900,12 +924,14 @@ window.Play = (() => {
     if (P.done) return;
     if (dir) {
       e.preventDefault();
-      if (sel < 0) { sel = 0; render(); srEl.textContent = islandLabel(sel); return; }
+      if (sel < 0) { sel = 0; render(); speak(islandLabel(sel)); return; }
       const edge = P.dirEdge[sel][dir];
       if (edge === undefined) return;
-      if (e.shiftKey) { if (!cycleEdge(edge)) render(); }
-      else { const ed = P.item.edges[edge]; sel = ed.a === sel ? ed.b : ed.a; render(); }
-      srEl.textContent = islandLabel(sel);
+      if (e.shiftKey) { if (!cycleEdge(edge, sel)) render(); return; }
+      const ed = P.item.edges[edge];
+      sel = ed.a === sel ? ed.b : ed.a;
+      render();
+      speak(islandLabel(sel));
       return;
     }
     if (k === "Backspace" || k === "Delete") { clearIsland(sel); e.preventDefault(); }
@@ -994,13 +1020,15 @@ window.Play = (() => {
 
   clockEl.addEventListener("click", () => { if (P) setPaused(!P.paused); });
   $("resume-btn").addEventListener("click", () => setPaused(false));
-  document.addEventListener("keydown", e => {
+  /* while paused the board is hidden and focus is on Jatka */
+  $("play-paused").addEventListener("keydown", e => {
     if ((e.key !== "p" && e.key !== "P") || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (state.mode !== "play" || !P || P.done || Overlay.anyOpen()) return;
-    if (e.target.closest && e.target.closest("input, textarea, select")) return;
-    setPaused(!P.paused);
+    setPaused(false);
     e.preventDefault();
   });
+
+  /* coming back to the board says where the selection is */
+  boardEl.addEventListener("focus", () => { if (P && sel >= 0) speak(label(sel)); });
 
   /* every overlay pauses the clock while it is open */
   Overlay.onChange(() => { if (P) P.pausedByOverlay = Overlay.anyOpen(); });

@@ -132,10 +132,14 @@ window.Play = (() => {
     boardEl.replaceChildren(g);
     const shading = P.ctl === "shading", ngram = item.kind === "nonogram";
     boardEl.setAttribute("aria-label",
-      item.kind === "hitori" ? "Hitoriruudukko. Liiku nuolinäppäimillä, välilyönti vaihtaa ruudun tilaa."
-      : ngram ? "Nonogrammiruudukko. Liiku nuolinäppäimillä, välilyönti värittää ja X merkitsee rastin."
+      item.kind === "hitori" ? "Hitoriruudukko. Liiku nuolinäppäimillä, välilyönti vaihtaa ruudun tilaa. " +
+        "R ja S lukevat rivin ja sarakkeen."
+      : ngram ? "Nonogrammiruudukko. Liiku nuolinäppäimillä, välilyönti värittää ja X merkitsee rastin. " +
+        "I kertoo vihjeet, R ja S lukevat rivin ja sarakkeen."
       : (["sudoku", "kropki", "killer"].includes(item.kind) ? "Sudokuruudukko" : "Ruudukko") +
-        ". Liiku nuolinäppäimillä ja kirjoita numero.");
+        ". Liiku nuolinäppäimillä ja kirjoita numero. I kertoo ruudun vihjeet, R ja S lukevat rivin ja sarakkeen.");
+    const readKeys = item.kind === "hitori" ? ` <kbd>R</kbd> ja <kbd>S</kbd> lukevat rivin ja sarakkeen.`
+      : ` <kbd>I</kbd> kertoo ruudun vihjeet, <kbd>R</kbd> ja <kbd>S</kbd> lukevat rivin ja sarakkeen.`;
     playEl.style.setProperty("--d", P.d || 1);
     /* on wide screens the pad is a block of three columns, or two for 1–4 */
     playEl.style.setProperty("--pad-cols", P.d === 4 ? 2 : 3);
@@ -150,9 +154,9 @@ window.Play = (() => {
       $("play-keys").innerHTML = ngram
         ? `Vedä rivin tai sarakkeen yli, niin merkitset monta ruutua kerralla. Napauta reunan lukua, niin se yliviivataan. ` +
           `Näppäimistöllä: <kbd>←↑→↓</kbd> liikkuu, <kbd>Välilyönti</kbd> värittää, <kbd>X</kbd> merkitsee rastin, ` +
-          `<kbd>Del</kbd> tyhjentää, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.`
+          `<kbd>Del</kbd> tyhjentää, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.` + readKeys
         : `Napauta ruutua: tyhjä, väritetty, ympyröity. Näppäimistöllä: <kbd>←↑→↓</kbd> liikkuu, ` +
-          `<kbd>Välilyönti</kbd> vaihtaa ruudun tilaa, <kbd>Del</kbd> tyhjentää, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.`;
+          `<kbd>Välilyönti</kbd> vaihtaa ruudun tilaa, <kbd>Del</kbd> tyhjentää, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.` + readKeys;
       return;
     }
 
@@ -168,7 +172,7 @@ window.Play = (() => {
     }
     $("play-keys").innerHTML = `Näppäimistöllä: <kbd>←↑→↓</kbd> liikkuu, <kbd>1</kbd>–<kbd>${P.d}</kbd> kirjoittaa, ` +
       `<kbd>Shift</kbd> + numero tekee muistiinpanon, <kbd>N</kbd> vaihtaa muistiinpanotilan, ` +
-      `<kbd>Del</kbd> pyyhkii, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.`;
+      `<kbd>Del</kbd> pyyhkii, <kbd>Ctrl</kbd> + <kbd>Z</kbd> kumoaa ja <kbd>P</kbd> pitää tauon.` + readKeys;
   }
 
   function clashes(i) {
@@ -208,6 +212,108 @@ window.Play = (() => {
 
   /* what the board says about a cell, or an island of sillat */
   const label = i => P.ctl === "bridges" ? islandLabel(i) : cellLabel(i);
+
+  /* ---------- clues (docs/saavutettavuus.md §4) ---------- */
+
+  const KROPKI_SIDE = {right: "oikealla", left: "vasemmalla", up: "ylhäällä", down: "alhaalla"};
+  const FUTOSHIKI_SIDE = {right: "oikea naapuri", left: "vasen naapuri", up: "ylempi", down: "alempi"};
+  const DOT = {white: "valkoinen", black: "musta", both: "yhdistelmä"};
+  const rowCol = i => [(i / P.n) | 0, i % P.n];
+  const ruutua = k => k === 1 ? "1 ruutu" : `${k} ruutua`;
+  const cellList = cells => cells.map(j => { const [r, c] = rowCol(j); return `rivi ${r + 1} sarake ${c + 1}`; }).join(", ");
+  /* the cells beside i, as [side, cell], in the order they are read */
+  function besides(i) {
+    const [r, c] = rowCol(i), n = P.n, out = [];
+    if (c < n - 1) out.push(["right", i + 1]);
+    if (c > 0) out.push(["left", i - 1]);
+    if (r > 0) out.push(["up", i - n]);
+    if (r < n - 1) out.push(["down", i + n]);
+    return out;
+  }
+  const between = (list, i, j) => list.find(x => (x.a === i && x.b === j) || (x.a === j && x.b === i));
+
+  /* The clues of cell i after a move from `from`, or all of them when from
+     is -1 (the I key, or the first move onto the board). A clue of a whole
+     cage, region, run or line is said only when the move enters a new one;
+     a clue between neighbours on every move. */
+  function clueText(i, from) {
+    const it = P.item, full = from < 0, [r, c] = rowCol(i), [fr, fc] = full ? [-1, -1] : rowCol(from);
+    const out = [];
+    switch (P.type) {
+      case "diagonal":
+        if (r === c || r + c === P.n - 1) out.push("Lävistäjällä.");
+        break;
+      case "jigsaw": {
+        const map = it.spec.regionMap, k = map[i];
+        if (full) out.push(`Alue ${k + 1}: ${cellList([...map.keys()].filter(j => map[j] === k))}.`);
+        else if (map[from] !== k) out.push(`Alue ${k + 1}.`);
+        break;
+      }
+      case "killer": {
+        const cage = it.cages[it.cageOf[i]], head = `Häkki ${cage.sum}, ${ruutua(cage.cells.length)}`;
+        if (full) out.push(`${head}: ${cellList(cage.cells)}.`);
+        else if (it.cageOf[from] !== it.cageOf[i]) out.push(head + ".");
+        break;
+      }
+      case "kropki": {
+        /* a missing dot is a clue too, so the dots are said every time */
+        const dots = [];
+        for (const [side, j] of besides(i)) {
+          const d = between(it.dots, i, j);
+          if (d && DOT[d.type]) dots.push(`${KROPKI_SIDE[side]} ${DOT[d.type]}`);
+        }
+        out.push(dots.length ? `Pallot: ${dots.join(", ")}.` : "Ei palloja.");
+        break;
+      }
+      case "futoshiki": {
+        /* the value at a is smaller than the value at b */
+        const signs = [];
+        for (const [side, j] of besides(i)) {
+          const con = between(it.cons, i, j);
+          if (con) signs.push(`${con.a === i ? "pienempi" : "suurempi"} kuin ${FUTOSHIKI_SIDE[side]}`);
+        }
+        out.push(signs.length ? signs.join(", ").replace(/^./, x => x.toUpperCase()) + "." : "Ei merkkejä.");
+        break;
+      }
+      case "skyscrapers": {
+        const cl = it.clues, v = x => x == null ? "ei vihjettä" : x;
+        if (full || r !== fr) out.push(`Rivin vihjeet: vasemmalla ${v(cl.left[r])}, oikealla ${v(cl.right[r])}.`);
+        if (full || c !== fc) out.push(`Sarakkeen vihjeet: ylhäällä ${v(cl.top[c])}, alhaalla ${v(cl.bottom[c])}.`);
+        break;
+      }
+      case "kakuro":
+        for (const run of it.runs) {
+          if (!run.cells.includes(i) || (!full && run.cells.includes(from))) continue;
+          out.push(`${run.dir === "h" ? "Vaakasumma" : "Pystysumma"} ${run.sum}, ${ruutua(run.cells.length)}.`);
+        }
+        break;
+      case "nonogram": {
+        const line = (clue, some, none) => clue.length ? `${some} ${clue.join(", ")}.` : none;
+        if (full || r !== fr) out.push(line(it.rowClues[r], "Rivin vihje", "Rivillä ei väritettäviä."));
+        if (full || c !== fc) out.push(line(it.colClues[c], "Sarakkeen vihje", "Sarakkeessa ei väritettäviä."));
+        break;
+      }
+    }
+    return out.join(" ");
+  }
+
+  /* a cell and its clues, as a move or the I key says them */
+  const withClues = (i, from) => [cellLabel(i), clueText(i, from)].filter(Boolean).join(". ");
+
+  /* R and S: the selected cell's row or column, cell by cell. Hitori keeps
+     each cell's digit, which is the puzzle there. */
+  function lineText(row) {
+    const [r, c] = rowCol(sel), n = P.n, hitori = P.item.kind === "hitori", words = [];
+    for (let k = 0; k < n; k++) {
+      const i = row ? r * n + k : k * n + c;
+      if (P.ctl === "shading") {
+        const m = P.prog.marks[i];
+        words.push(hitori ? P.item.values[i] + (m === 1 ? " väritetty" : m === 2 ? " ympyröity" : "")
+          : m === 1 ? "väritetty" : m === 2 ? "rasti" : "tyhjä");
+      } else words.push(!P.open[i] ? "vihje" : P.prog.val[i] || "tyhjä");
+    }
+    return `${row ? "Rivi" : "Sarake"} ${(row ? r : c) + 1}: ${words.join(", ")}`;
+  }
 
   /* one cell of a shading board; also used while a drag paints */
   function renderShadeCell(i, peerSet) {
@@ -718,19 +824,26 @@ window.Play = (() => {
     /* P pauses from the board only (§2.2), so a dock button does not */
     if (k === "p" || k === "P") { setPaused(true); e.preventDefault(); return; }
     if (P.ctl === "bridges") { bridgeKey(e); return; }
+    /* I, R and S only read (§4.1) */
+    if (/^[irs]$/i.test(k)) {
+      const t = k.toLowerCase();
+      if (sel >= 0) speak(t === "i" ? withClues(sel, -1) : lineText(t === "r"));
+      e.preventDefault();
+      return;
+    }
     if (k.startsWith("Arrow")) {
       if (P.done) return;
       /* steps over kakuro black cells; at the edge it stays put */
       const step = {ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1]}[k];
       if (!step) return;
-      const n = P.n, [dr, dc] = step;
+      const n = P.n, [dr, dc] = step, from = sel;
       let r = ((sel < 0 ? 0 : sel) / n) | 0, c = (sel < 0 ? 0 : sel) % n;
       if (sel < 0) { const first = P.open.indexOf(1); r = (first / n) | 0; c = first % n; }
       else for (let y = r + dr, x = c + dc; y >= 0 && y < n && x >= 0 && x < n; y += dr, x += dc) {
         if (P.open[y * n + x]) { r = y; c = x; break; }
       }
       select(r * n + c);
-      speak(cellLabel(sel));
+      speak(withClues(sel, from));
       e.preventDefault();
       return;
     }

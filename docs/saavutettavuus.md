@@ -112,6 +112,8 @@ Neighbour words: `oikealla`, `vasemmalla`, `ylhäällä`, `alhaalla` for kropki;
 
 The first move onto the board (`from` unset) speaks every line, cage, region and run clue of that cell, as `I` does.
 
+As built: a one-cell killer cage is `1 ruutu`, not `1 ruutua`. In hitori, `R` and `S` keep each cell's digit (`5, 2 väritetty, 3 ympyröity`), since the digits are the puzzle there; the nonogram reads marks only. A move is spoken as the cell label, a full stop and the clues: `Rivi 1, sarake 4: tyhjä. Häkki 18, 3 ruutua.`
+
 ## 5. Contrast (P3–P9)
 
 ### 5.1 Tokens

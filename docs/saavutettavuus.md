@@ -157,7 +157,7 @@ The dark theme's `--shadow-1` becomes `0 0 #0000` instead of `none`: the P5 rule
 - **R3, pad buttons**: label `{n}, jäljellä {k}` instead of `Numero {n}, jäljellä {k}`, so the name starts with exactly the visible digit. In notes mode keep `Muistiinpano {n}`. axe reads the stacked digit and count as one word ("14"), which no name contains, so the count is drawn by CSS from `data-left` on the `small`; the button's text is then the digit alone, and the count is still in the name.
 - **R3, Pulmatyyppi row**: remove `aria-label` from `#type-row` and `aria-hidden` from `.tr-go`, so the name is the visible text: "Pulmatyyppi Sudoku 9 × 9 Vaihda".
 - **P8**: given digits `font-weight:600` → keep; entered digits 500 → 400, so the two differ by more than colour. The mono font is loaded at 400, 500 and 600, so do not use 700.
-- **P10**: print renderers label each grid `{tyyppi}, tehtävä {k}` and each solution `{tyyppi}, ratkaisu {k}` instead of `Tehtäväruudukko` / `Ratkaisu`. Attributes only; the snapshot must stay clean.
+- **P10**: print renderers label each grid `{tyyppi}, tehtävä {k}` and each solution `{tyyppi}, ratkaisu {k}` instead of `Tehtäväruudukko` / `Ratkaisu`. Attributes only; the snapshot must stay clean. As built, the renderers keep `role="img"` and no longer name the grid; `buildSheet()` names it, since only it knows the type and the number.
 
 ## 8. Testing
 

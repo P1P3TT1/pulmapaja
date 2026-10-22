@@ -203,8 +203,9 @@ if (browserGroups.length) {
     const found = new Map();
     let states = 0;
     async function audit(page, label) {
-      /* a popover still fading in would read as low contrast */
-      await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished)));
+      /* a popover still fading in would read as low contrast; a cancelled
+         animation rejects its promise, and is as done */
+      await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished.catch(() => {}))));
       await frames(page);
       if (!await page.evaluate(() => !!window.axe)) await page.addScriptTag({content: axeSource});
       const res = await page.evaluate(tags => axe.run(document, {runOnly: {type: "tag", values: tags}, resultTypes: ["violations"]}), AXE_TAGS);

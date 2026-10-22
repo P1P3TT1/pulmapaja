@@ -155,7 +155,6 @@ function renderSudoku(item, isSolution) {
   g.className = "grid" + (isSolution ? " solution" : "");
   g.style.gridTemplateColumns = `repeat(${n}, var(--cell))`;
   g.setAttribute("role", "img");
-  g.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Tehtäväruudukko");
 
   const regionOf = new Int8Array(n * n).fill(-1);
   for (const u of spec.units) {
@@ -245,7 +244,6 @@ function kropkiDotMark(cx, cy, type) {
 
 function renderKropki(item, isSolution) {
   const g = renderSudoku(item, isSolution);
-  g.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Kropki-sudoku-tehtävä");
   const n = item.spec.n;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "kdots");
@@ -318,7 +316,6 @@ function killerCagePath(cageOf, n, inset) {
 function renderKiller(item, isSolution) {
   const g = renderSudoku(item, isSolution);
   g.classList.add("killer");
-  g.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Killer-sudoku-tehtävä");
   const n = item.spec.n;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "kcages");
@@ -348,7 +345,6 @@ function renderFutoshiki(item, isSolution) {
   g.className = "fgrid";
   g.style.gridTemplateColumns = `repeat(${n - 1}, var(--cell) var(--gap)) var(--cell)`;
   g.setAttribute("role", "img");
-  g.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Futoshiki-tehtävä");
 
   const h = new Map(), v = new Map();
   for (const con of item.cons) {
@@ -392,7 +388,6 @@ function renderKakuro(item, isSolution) {
   g.className = "kgrid";
   g.style.gridTemplateColumns = `repeat(${size}, var(--cell))`;
   g.setAttribute("role", "img");
-  g.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Kakuro-tehtävä");
 
   const acrossAt = new Map(), downAt = new Map();
   for (const run of item.runs) {
@@ -433,7 +428,6 @@ function renderHitori(item, isSolution) {
   g.className = "hgrid";
   g.style.gridTemplateColumns = `repeat(${n}, var(--cell))`;
   g.setAttribute("role", "img");
-  g.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Hitori-tehtävä");
   for (let i = 0; i < n * n; i++) {
     const r = (i / n) | 0, c = i % n;
     const cls = [];
@@ -473,14 +467,12 @@ function renderNonogram(item, isSolution) {
      leaving them off keeps the solution sheets compact */
   if (isSolution) {
     play.setAttribute("role", "img");
-    play.setAttribute("aria-label", "Ratkaisu");
     return play;
   }
 
   const wrap = document.createElement("div");
   wrap.className = "ngram";
   wrap.setAttribute("role", "img");
-  wrap.setAttribute("aria-label", "Nonogrammi-tehtävä");
 
   const corner = document.createElement("div");
   const cols = document.createElement("div");
@@ -524,7 +516,6 @@ function renderSkyscrapers(item, isSolution) {
   const wrap = document.createElement("div");
   wrap.className = "sky";
   wrap.setAttribute("role", "img");
-  wrap.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Pilvenpiirtäjät-tehtävä");
   const {top, bottom, left, right} = item.clues;
   wrap.append(corner(), strip("h", top), corner(),
               strip("v", left), play, strip("v", right),
@@ -544,7 +535,6 @@ function renderHashi(item, isSolution) {
   svg.setAttribute("viewBox", `0 0 ${n} ${n}`);
   svg.style.width = svg.style.height = `calc(var(--cell) * ${n})`;
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", isSolution ? "Ratkaisu" : "Sillat-tehtävä");
 
   const dots = [];
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
@@ -997,7 +987,11 @@ function buildSheet(title, level, layout, items, pageNo, pageTotal, isSolution, 
     const h = document.createElement("h3");
     h.textContent = (isSolution ? "Ratkaisu " : "Nro ") + item.number;
     art.appendChild(h);
-    art.appendChild(RENDER[item.data.kind](item.data, isSolution));
+    /* each renderer draws a role="img"; its name is given here, where the
+       type and the number are known (docs/saavutettavuus.md §7, P10) */
+    const grid = RENDER[item.data.kind](item.data, isSolution);
+    grid.setAttribute("aria-label", `${t.name}, ${isSolution ? "ratkaisu" : "tehtävä"} ${item.number}`);
+    art.appendChild(grid);
     if (PLAY_BASE_URL && !isSolution) {
       art.classList.add("has-qr");
       art.appendChild(puzzleQr(type, level, item.data));

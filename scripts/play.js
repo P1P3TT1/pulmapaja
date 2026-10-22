@@ -109,7 +109,6 @@ window.Play = (() => {
     /* the renderer draws the player's digits where the givens would be */
     const g = RENDER[item.kind](Object.assign({}, item, {puz: prog.val, puzzle: prog.val}), false);
     g.removeAttribute("role");
-    g.removeAttribute("aria-label");
     g.setAttribute("aria-hidden", "true");
     /* every renderer marks the play cells, and only them, with .cell, in
        reading order; clue strips, gaps and sums use other classes */
@@ -924,7 +923,6 @@ window.Play = (() => {
   function drawHashi() {
     const svg = RENDER.hashi(Object.assign({}, P.item, {solution: P.prog.bridges}), true);
     svg.removeAttribute("role");
-    svg.removeAttribute("aria-label");
     svg.setAttribute("aria-hidden", "true");
     const counts = bridgeCounts(), circles = svg.querySelectorAll(".hisland"), texts = svg.querySelectorAll("text");
     P.item.islands.forEach((p, i) => {

@@ -119,7 +119,7 @@ Add one token and change four values in `:root` and in both dark blocks (`@media
 | Token | Light | Dark | Was | Fixes |
 |---|---|---|---|---|
 | `--grid-thin` | `#7F8B95` | `#6B7A86` | `#DCE2E7` / `#33404B` | P7 thin grid lines 3.48 / 3.42:1; P6 input, stepper and textarea borders 3.27 / 3.42:1 on `--surface-2` |
-| `--edge` (new) | `#7F8B95` | `#6B7A86` | – | P5 selected segment outline, P6 switch off track |
+| `--edge` (new) | `#7A858F` | `#72818C` | – | P5 selected segment outline, P6 switch off track; a step darker than `--grid-thin`, so it also clears 3:1 on the top bar's `--fill-strong` track (3.02:1 in both themes) |
 | `--shade-ink` (new) | `#A9B4BC` | `#4E5B66` | `--ink-soft` | P3 hitori shaded digit 7.8 / 5.7:1 |
 
 `--grid-thin` is also used by the hashi dots, the own-image canvas border, the QR box outline in Jaa ja jatka and the kakuro and hitori cell borders; all darken with it, which is intended. Thick grid lines stay distinct by width and by 10–12:1. If the darker thin lines look too heavy, see §10, decision 2.
@@ -140,6 +140,8 @@ Add one token and change four values in `:root` and in both dark blocks (`@media
 ```
 
 Edit the existing rules rather than appending overrides. P8 (given vs entered digits) is §7.
+
+The dark theme's `--shadow-1` becomes `0 0 #0000` instead of `none`: the P5 rule lists it beside the inset edge, and a list holding `none` is invalid, which would drop the edge in dark.
 
 ## 6. Layout (P11, P12)
 

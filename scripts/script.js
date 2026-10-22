@@ -836,7 +836,6 @@ function syncType() {
   const t = TYPES[state.type];
   el("type-row-icon").innerHTML = t.icon;
   el("type-row-name").textContent = t.name;
-  el("type-row").setAttribute("aria-label", `Pulmatyyppi: ${t.name}. Vaihda`);
   el("rules").textContent = t.rules;
   el("title").placeholder = t.name;
   el("opt-symmetry").disabled = !t.symmetry;
